@@ -21,10 +21,20 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Default initial data for testing/demo
     const DEFAULT_STAFFS = [
-        { id: 'st-1', name: '佐藤 健', status: 'offline', avatarColor: 'hsl(210, 80%, 45%)' },
-        { id: 'st-2', name: '鈴木 一郎', status: 'offline', avatarColor: 'hsl(150, 80%, 38%)' },
-        { id: 'st-3', name: '高橋 美咲', status: 'offline', avatarColor: 'hsl(350, 80%, 50%)' },
-        { id: 'st-4', name: '渡辺 杏', status: 'offline', avatarColor: 'hsl(280, 70%, 50%)' }
+        { id: 'st-1', name: '河合 茂明', status: 'offline', avatarColor: 'hsl(210, 80%, 45%)' },
+        { id: 'st-2', name: '河合 朋子', status: 'offline', avatarColor: 'hsl(150, 80%, 38%)' },
+        { id: 'st-3', name: 'マックアリース 温子', status: 'offline', avatarColor: 'hsl(350, 80%, 50%)' },
+        { id: 'st-4', name: '千葉 幸夫', status: 'offline', avatarColor: 'hsl(280, 70%, 50%)' },
+        { id: 'st-5', name: '尾崎 昭太', status: 'offline', avatarColor: 'hsl(20, 80%, 50%)' },
+        { id: 'st-6', name: '木村 哲子', status: 'offline', avatarColor: 'hsl(60, 70%, 40%)' },
+        { id: 'st-7', name: '末廣 綾乃', status: 'offline', avatarColor: 'hsl(100, 70%, 45%)' },
+        { id: 'st-8', name: '北口 愛美', status: 'offline', avatarColor: 'hsl(180, 75%, 40%)' },
+        { id: 'st-9', name: '寺西 真名美', status: 'offline', avatarColor: 'hsl(230, 80%, 55%)' },
+        { id: 'st-10', name: '植西 順子', status: 'offline', avatarColor: 'hsl(300, 70%, 45%)' },
+        { id: 'st-11', name: '看護師１', status: 'offline', avatarColor: 'hsl(320, 80%, 50%)' },
+        { id: 'st-12', name: '看護師２', status: 'offline', avatarColor: 'hsl(340, 80%, 50%)' },
+        { id: 'st-13', name: '医療事務１', status: 'offline', avatarColor: 'hsl(130, 70%, 40%)' },
+        { id: 'st-14', name: '医療事務２', status: 'offline', avatarColor: 'hsl(160, 70%, 40%)' }
     ];
 
     const store = {
@@ -41,10 +51,20 @@ document.addEventListener('DOMContentLoaded', () => {
     let staffs = store.get('staffs', DEFAULT_STAFFS);
     let records = store.get('records', []);
     let pointLedger = store.get('point_ledger', {
-        'st-1': { current: 120, lifetime: 350 },
-        'st-2': { current: 80, lifetime: 220 },
-        'st-3': { current: 150, lifetime: 400 },
-        'st-4': { current: 40, lifetime: 120 }
+        'st-1': { current: 0, lifetime: 0 },
+        'st-2': { current: 0, lifetime: 0 },
+        'st-3': { current: 0, lifetime: 0 },
+        'st-4': { current: 0, lifetime: 0 },
+        'st-5': { current: 0, lifetime: 0 },
+        'st-6': { current: 0, lifetime: 0 },
+        'st-7': { current: 0, lifetime: 0 },
+        'st-8': { current: 0, lifetime: 0 },
+        'st-9': { current: 0, lifetime: 0 },
+        'st-10': { current: 0, lifetime: 0 },
+        'st-11': { current: 0, lifetime: 0 },
+        'st-12': { current: 0, lifetime: 0 },
+        'st-13': { current: 0, lifetime: 0 },
+        'st-14': { current: 0, lifetime: 0 }
     });
     let pointLogs = store.get('point_logs', []);
     let settings = store.get('settings', {
@@ -52,6 +72,37 @@ document.addEventListener('DOMContentLoaded', () => {
         adminPassword: 'admin',
         gasUrl: ''
     });
+
+    // マイグレーション：古いテスト用スタッフ「佐藤 健」が残っている場合、実在スタッフへ強制リセットする
+    if (staffs.some(s => s.name === '佐藤 健')) {
+        localStorage.removeItem('clinic_flow_staffs');
+        localStorage.removeItem('clinic_flow_point_ledger');
+        localStorage.removeItem('clinic_flow_point_logs');
+        localStorage.removeItem('clinic_flow_records');
+        staffs = DEFAULT_STAFFS;
+        pointLedger = {
+            'st-1': { current: 0, lifetime: 0 },
+            'st-2': { current: 0, lifetime: 0 },
+            'st-3': { current: 0, lifetime: 0 },
+            'st-4': { current: 0, lifetime: 0 },
+            'st-5': { current: 0, lifetime: 0 },
+            'st-6': { current: 0, lifetime: 0 },
+            'st-7': { current: 0, lifetime: 0 },
+            'st-8': { current: 0, lifetime: 0 },
+            'st-9': { current: 0, lifetime: 0 },
+            'st-10': { current: 0, lifetime: 0 },
+            'st-11': { current: 0, lifetime: 0 },
+            'st-12': { current: 0, lifetime: 0 },
+            'st-13': { current: 0, lifetime: 0 },
+            'st-14': { current: 0, lifetime: 0 }
+        };
+        pointLogs = [];
+        records = [];
+        store.set('staffs', staffs);
+        store.set('point_ledger', pointLedger);
+        store.set('point_logs', pointLogs);
+        store.set('records', records);
+    }
 
     let selectedStaffId = null;
     let isAdminAuthenticated = false;
