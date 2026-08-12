@@ -49,7 +49,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let pointLogs = store.get('point_logs', []);
     let settings = store.get('settings', {
         pointRate: 10, // points per hour
-        adminPassword: 'admin'
+        adminPassword: 'admin',
+        gasUrl: ''
     });
 
     let selectedStaffId = null;
@@ -114,6 +115,8 @@ document.addEventListener('DOMContentLoaded', () => {
         pointReasonInput: document.getElementById('point-reason'),
         pointsTableBody: document.getElementById('points-table-body'),
         pointLogsTableBody: document.getElementById('point-logs-table-body'),
+        gasUrlInput: document.getElementById('gas-url'),
+        btnSaveGas: document.getElementById('btn-save-gas'),
         
         // Auth Modal
         modalAuth: document.getElementById('modal-auth'),
@@ -528,6 +531,7 @@ document.addEventListener('DOMContentLoaded', () => {
             saveState();
             renderStaffGrid();
             closeControlPanel();
+            sendToGoogleSheets(record);
             showToast(`${staff.name}さん、お疲れ様でした。退勤を記録しました。(勤務時間: ${(workMinutes/60).toFixed(1)}時間、ポイント獲得なし)`, 'success');
         }
     });
@@ -584,6 +588,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Save state and update UI
         saveState();
         renderStaffGrid();
+        sendToGoogleSheets(record);
 
         // Close modal and reset form fields
         elements.modalPeerGift.classList.remove('active');
@@ -614,6 +619,31 @@ document.addEventListener('DOMContentLoaded', () => {
         store.set('point_ledger', pointLedger);
         store.set('point_logs', pointLogs);
         store.set('settings', settings);
+    }
+
+    // Send attendance & points data to Google Sheets via GAS
+    function sendToGoogleSheets(record) {
+        if (!settings.gasUrl) {
+            console.log("GAS URL is not configured. Skipping Google Sheets upload.");
+            return;
+        }
+
+        fetch(settings.gasUrl, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(record)
+        })
+        .then(() => {
+            console.log("Successfully queued send to Google Sheets.");
+            showToast("Googleスプレッドシートへ同期しました。", "success");
+        })
+        .catch(err => {
+            console.error("Failed to send data to Google Sheets:", err);
+            showToast("スプレッドシート同期に失敗しました。", "warning");
+        });
     }
 
     // ==========================================================================
@@ -929,7 +959,18 @@ document.addEventListener('DOMContentLoaded', () => {
         showToast(`${staff.name}さんのポイントを調整しました。(${amount}pt)`, 'success');
     });
 
+    // Save GAS Settings
+    elements.btnSaveGas.addEventListener('click', () => {
+        const url = elements.gasUrlInput.value.trim();
+        settings.gasUrl = url;
+        saveState();
+        showToast('Googleスプレッドシート連携URLを保存しました。', 'success');
+    });
+ 
     function renderPointsView() {
+        // Show current GAS URL
+        elements.gasUrlInput.value = settings.gasUrl || '';
+
         // Render Dropdown staff selection
         elements.selectPointStaff.innerHTML = '<option value="">スタッフを選択...</option>';
         staffs.forEach(s => {

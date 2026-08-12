@@ -234,6 +234,18 @@
                                 </p>
                             </div>
 
+                            <h3>Googleスプレッドシート連携</h3>
+                            <div class="admin-form" style="background: white; padding: 1.25rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); margin-bottom: 1.5rem;">
+                                <div class="form-group">
+                                    <label for="gas-url">GAS ウェブアプリ URL</label>
+                                    <input type="url" id="gas-url" class="form-control" placeholder="https://script.google.com/macros/s/.../exec">
+                                    <p class="field-desc mt-1" style="font-size: 0.75rem; color: var(--text-muted);">
+                                        ※GoogleスプレッドシートのApps Scriptで発行したウェブアプリURLを入力します。
+                                    </p>
+                                </div>
+                                <button id="btn-save-gas" class="btn btn-primary btn-full">URLを保存する</button>
+                            </div>
+
                             <h3>ポイント手動調整</h3>
                             <form id="form-use-points" class="admin-form">
                                 <div class="form-group">
