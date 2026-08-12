@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clinic Flow - 出勤管理システム</title>
+    <!-- Google Fonts: Plus Jakarta Sans & Noto Sans JP -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- App Container -->
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-logo">
+                <i data-lucide="activity" class="logo-icon"></i>
+                <div class="logo-text">
+                    <h1>Clinic Flow</h1>
+                    <span>勤怠・ポイント管理</span>
+                </div>
+            </div>
+            
+            <!-- Digital Clock -->
+            <div class="header-clock">
+                <div id="current-date" class="clock-date">2026年08月12日(水)</div>
+                <div id="current-time" class="clock-time">07:30:00</div>
+            </div>
+
+            <!-- Admin Link Button -->
+            <button id="btn-admin-nav" class="btn btn-secondary btn-icon-only" title="管理画面">
+                <i data-lucide="settings"></i>
+            </button>
+        </header>
+
+        <!-- Active Break Indicator Bar (休憩中スタッフの明示) -->
+        <div id="break-status-bar" class="break-status-bar hidden">
+            <div class="bar-content">
+                <span class="pulse-indicator"></span>
+                <i data-lucide="coffee"></i>
+                <span id="break-status-text">只今 〇〇さんが休憩中です</span>
+            </div>
+        </div>
+
+        <!-- Main Content (Staff Board) -->
+        <main id="main-attendance" class="main-layout">
+            <!-- Staff List Grid -->
+            <section class="staff-section">
+                <div class="section-header">
+                    <h2><i data-lucide="users"></i> スタッフ一覧</h2>
+                    <span class="helper-text">お名前をタップして打刻してください</span>
+                </div>
+                <div id="staff-grid" class="staff-grid">
+                    <!-- Dynamic Staff Cards will be injected here -->
+                </div>
+            </section>
+
+            <!-- Attendance Controls (Floating Panel or Sidebar) -->
+            <section id="control-panel" class="control-panel empty-state">
+                <div class="panel-placeholder">
+                    <i data-lucide="fingerprint" class="placeholder-icon"></i>
+                    <p>スタッフを選択してください</p>
+                </div>
+                
+                <div class="panel-content hidden">
+                    <button id="btn-close-panel" class="btn-close"><i data-lucide="x"></i></button>
+                    <div class="selected-staff-info">
+                        <div class="staff-avatar" id="active-staff-avatar">
+                            <span id="active-staff-initial">A</span>
+                        </div>
+                        <h3 id="active-staff-name">スタッフ名</h3>
+                        <div id="active-staff-status" class="status-badge status-offline">未出勤</div>
+                    </div>
+
+                    <div class="action-buttons">
+                        <!-- 出勤ボタン -->
+                        <button id="btn-checkin" class="btn btn-action btn-checkin">
+                            <i data-lucide="log-in"></i>
+                            <span class="btn-label">出勤</span>
+                        </button>
+                        
+                        <!-- 休憩ボタン (動的に 休憩開始/休憩終了) -->
+                        <button id="btn-break" class="btn btn-action btn-break" disabled>
+                            <i data-lucide="coffee"></i>
+                            <span id="btn-break-text" class="btn-label">休憩</span>
+                        </button>
+                        
+                        <!-- 退勤ボタン -->
+                        <button id="btn-checkout" class="btn btn-action btn-checkout" disabled>
+                            <i data-lucide="log-out"></i>
+                            <span class="btn-label">退勤</span>
+                        </button>
+                    </div>
+
+                    <!-- Today's record summary for active staff -->
+                    <div class="today-summary">
+                        <h4>本日の記録</h4>
+                        <ul class="summary-list">
+                            <li><span>出勤時刻:</span> <span id="summary-checkin" class="time-val">-</span></li>
+                            <li><span>休憩開始:</span> <span id="summary-break-start" class="time-val">-</span></li>
+                            <li><span>休憩終了:</span> <span id="summary-break-end" class="time-val">-</span></li>
+                            <li><span>退勤時刻:</span> <span id="summary-checkout" class="time-val">-</span></li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Admin View (Hidden by default) -->
+        <main id="main-admin" class="main-layout hidden">
+            <!-- Sidebar for Admin Navigation -->
+            <aside class="admin-sidebar">
+                <button id="btn-back-to-attendance" class="btn btn-secondary btn-full">
+                    <i data-lucide="arrow-left"></i> 打刻画面に戻る
+                </button>
+                <nav class="admin-nav">
+                    <button class="nav-item active" data-tab="tab-records">
+                        <i data-lucide="file-spreadsheet"></i> 打刻履歴
+                    </button>
+                    <button class="nav-item" data-tab="tab-staff-management">
+                        <i data-lucide="user-cog"></i> スタッフ管理
+                    </button>
+                    <button class="nav-item" data-tab="tab-points">
+                        <i data-lucide="award"></i> 360度評価ポイント
+                    </button>
+                </nav>
+            </aside>
+
+            <!-- Admin Contents Container -->
+            <section class="admin-content">
+                <!-- Tab: 打刻履歴 -->
+                <div id="tab-records" class="tab-panel active">
+                    <div class="panel-header">
+                        <h2>打刻履歴</h2>
+                        <div class="header-actions">
+                            <div class="date-range-picker">
+                                <input type="date" id="filter-start-date" class="form-control">
+                                <span class="range-separator">〜</span>
+                                <input type="date" id="filter-end-date" class="form-control">
+                            </div>
+                            <button id="btn-export-csv" class="btn btn-primary">
+                                <i data-lucide="download"></i> CSVエクスポート
+                            </button>
+                        </div>
+                    </div>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>日付</th>
+                                    <th>スタッフ名</th>
+                                    <th>出勤</th>
+                                    <th>休憩開始</th>
+                                    <th>休憩終了</th>
+                                    <th>退勤</th>
+                                    <th>実労働時間</th>
+                                    <th>獲得pt</th>
+                                    <th>贈った相手</th>
+                                    <th>贈ったpt</th>
+                                </tr>
+                            </thead>
+                            <tbody id="records-table-body">
+                                <!-- Dynamic rows -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Tab: スタッフ管理 -->
+                <div id="tab-staff-management" class="tab-panel">
+                    <div class="panel-header">
+                        <h2>スタッフ管理</h2>
+                    </div>
+                    
+                    <div class="admin-grid">
+                        <!-- Add Staff Form -->
+                        <div class="admin-card">
+                            <h3>新規スタッフ登録</h3>
+                            <form id="form-add-staff" class="admin-form">
+                                <div class="form-group">
+                                    <label for="new-staff-name">スタッフ名</label>
+                                    <input type="text" id="new-staff-name" class="form-control" placeholder="例: 山田 花子" required>
+                                </div>
+                                <button type="submit" class="btn btn-primary btn-full">登録する</button>
+                            </form>
+                        </div>
+
+                        <!-- Staff List for Edit/Delete -->
+                        <div class="admin-card">
+                            <h3>スタッフ一覧</h3>
+                            <div class="admin-table-container">
+                                <table class="data-table small-table">
+                                    <thead>
+                                        <tr>
+                                            <th>名前</th>
+                                            <th>状態</th>
+                                            <th>操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="admin-staff-table-body">
+                                        <!-- Dynamic rows -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab: ポイント・福利厚生 -->
+                <div id="tab-points" class="tab-panel">
+                    <div class="panel-header">
+                        <h2>360度評価ポイント管理</h2>
+                    </div>
+
+                    <div class="admin-grid">
+                        <!-- Point Rules & Adjustments -->
+                        <div class="admin-card">
+                            <h3>ポイント付与ルール</h3>
+                            <div class="admin-form" style="background: white; padding: 1.25rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); margin-bottom: 1.5rem;">
+                                <ul style="list-style: none; display: flex; flex-direction: column; gap: 0.65rem; font-size: 0.9rem;">
+                                    <li style="display: flex; justify-content: space-between; border-bottom: 1px dashed var(--border-color); padding-bottom: 0.4rem;">
+                                        <span>3時間以上の勤務:</span> <strong>2 ポイント獲得</strong>
+                                    </li>
+                                    <li style="display: flex; justify-content: space-between; padding-bottom: 0.2rem;">
+                                        <span>6時間以上の勤務:</span> <strong>3 ポイント獲得</strong>
+                                    </li>
+                                </ul>
+                                <p class="field-desc mt-2" style="font-size: 0.75rem; color: var(--text-muted); line-height: 1.4; border-top: 1px solid var(--border-color); padding-top: 0.5rem; margin-top: 0.5rem;">
+                                    ※獲得したポイントは退勤時に他スタッフへ360度評価として贈ることができます。
+                                </p>
+                            </div>
+
+                            <h3>ポイント手動調整</h3>
+                            <form id="form-use-points" class="admin-form">
+                                <div class="form-group">
+                                    <label for="select-point-staff">スタッフ</label>
+                                    <select id="select-point-staff" class="form-control" required>
+                                        <option value="">スタッフを選択...</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="point-amount">調整ポイント数 (マイナス値で減算)</label>
+                                    <input type="number" id="point-amount" class="form-control" placeholder="例: 10 または -10" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="point-reason">調整理由</label>
+                                    <input type="text" id="point-reason" class="form-control" placeholder="例: 手動調整、景品交換など" required>
+                                </div>
+                                <button type="submit" class="btn btn-primary btn-full">ポイントを調整する</button>
+                            </form>
+                        </div>
+
+                        <!-- Points Ledger -->
+                        <div class="admin-card">
+                            <h3>ポイント保有状況</h3>
+                            <div class="admin-table-container">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>名前</th>
+                                            <th>現在の保有pt</th>
+                                            <th>累計獲得pt</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="points-table-body">
+                                        <!-- Dynamic points ledger -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Point Logs -->
+                    <div class="admin-card mt-4">
+                        <h3>ポイント履歴（付与・使用ログ）</h3>
+                        <div class="table-container">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>日時</th>
+                                        <th>スタッフ名</th>
+                                        <th>アクション</th>
+                                        <th>ポイント数</th>
+                                        <th>理由 / 勤務時間</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="point-logs-table-body">
+                                    <!-- Dynamic point logs -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Admin Authentication Modal -->
+    <div id="modal-auth" class="modal">
+        <div class="modal-content">
+            <button id="btn-close-auth" class="btn-close"><i data-lucide="x"></i></button>
+            <div class="modal-header">
+                <i data-lucide="lock" class="lock-icon"></i>
+                <h3>管理者ログイン</h3>
+                <p>パスワードを入力してください。</p>
+            </div>
+            <form id="form-auth" class="modal-form">
+                <input type="password" id="admin-password" class="form-control text-center" placeholder="パスワードを入力" required autocomplete="current-password">
+                <p id="auth-error" class="error-text hidden">パスワードが正しくありません。</p>
+                <button type="submit" class="btn btn-primary btn-full">認証</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Peer Point Gift Modal -->
+    <div id="modal-peer-gift" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <i data-lucide="gift" class="lock-icon" style="background: var(--warning-light); color: var(--warning); margin: 0 auto 1rem auto; display: block; width: 3rem; height: 3rem; border-radius: 50%; padding: 0.6rem;"></i>
+                <h3>お疲れ様でした！</h3>
+                <p id="peer-gift-message" style="font-weight: 600; font-size: 1.1rem; color: var(--primary-dark); margin: 0.5rem 0;">本日の勤務で 0 ポイント獲得しました。</p>
+                <p class="field-desc">獲得したポイントを他のスタッフに贈りましょう！</p>
+            </div>
+            <form id="form-peer-gift" class="modal-form">
+                <div class="form-group">
+                    <label for="select-gift-receiver">贈る相手</label>
+                    <select id="select-gift-receiver" class="form-control" required>
+                        <option value="">スタッフを選択...</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="select-gift-amount">贈るポイント数</label>
+                    <select id="select-gift-amount" class="form-control" required>
+                        <!-- Dynamic options -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="gift-message">感謝・評価のメッセージ</label>
+                    <input type="text" id="gift-message" class="form-control" placeholder="例: 今日はサポートありがとう！">
+                </div>
+                <button type="submit" class="btn btn-primary btn-full">ポイントを贈って退勤する</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
