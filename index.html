@@ -31,6 +31,12 @@
                 <div id="current-time" class="clock-time">07:30:00</div>
             </div>
 
+            <!-- Cloud Sync Status Pill (複数PC同期状態) -->
+            <div id="cloud-sync-pill" class="cloud-sync-pill" title="クリックして最新データを同期">
+                <i data-lucide="cloud" id="cloud-sync-icon" class="sync-icon"></i>
+                <span id="sync-status-text">未同期</span>
+            </div>
+
             <!-- Admin Link Button -->
             <button id="btn-admin-nav" class="btn btn-secondary btn-icon-only" title="管理画面">
                 <i data-lucide="settings"></i>
@@ -106,23 +112,46 @@
                             <li><span>退勤時刻:</span> <span id="summary-checkout" class="time-val">-</span></li>
                         </ul>
                     </div>
+
+                    <!-- 打刻修正申請ボタン -->
+                    <button id="btn-open-correction-modal" class="btn btn-secondary btn-full" style="margin-top: 0.75rem; font-size: 0.85rem; padding: 0.6rem; display: flex; align-items: center; justify-content: center; gap: 0.4rem; border-color: var(--border-color);">
+                        <i data-lucide="edit-3" style="width: 15px; height: 15px;"></i> 打刻修正・ミスの申請
+                    </button>
                 </div>
             </section>
         </main>
 
         <!-- Admin View (Hidden by default) -->
-        <main id="main-admin" class="main-layout hidden">
+        <main id="main-admin" class="admin-layout hidden">
             <!-- Sidebar for Admin Navigation -->
             <aside class="admin-sidebar">
                 <button id="btn-back-to-attendance" class="btn btn-secondary btn-full">
                     <i data-lucide="arrow-left"></i> 打刻画面に戻る
                 </button>
+
+                <!-- 給与計算・Excel出力への常駐クイックアクセス -->
+                <div class="sidebar-action-box">
+                    <div class="action-box-header">
+                        <i data-lucide="calculator"></i>
+                        <span>給与計算連携</span>
+                    </div>
+                    <button id="btn-sidebar-excel-export" class="btn btn-excel btn-full">
+                        <i data-lucide="file-spreadsheet"></i> 時間集計表 (Excel) 出力
+                    </button>
+                    <p class="sidebar-action-desc">打刻時間を集計表.xlsxへワンクリック転記</p>
+                </div>
+
                 <nav class="admin-nav">
+                    <div class="nav-section-title">管理メニュー</div>
                     <button class="nav-item active" data-tab="tab-records">
-                        <i data-lucide="file-spreadsheet"></i> 打刻履歴
+                        <i data-lucide="calendar"></i> 打刻履歴
+                    </button>
+                    <button class="nav-item" data-tab="tab-requests" style="position: relative;">
+                        <i data-lucide="clipboard-check"></i> 申請管理
+                        <span id="badge-pending-requests" class="nav-badge hidden">0</span>
                     </button>
                     <button class="nav-item" data-tab="tab-staff-management">
-                        <i data-lucide="user-cog"></i> スタッフ管理
+                        <i data-lucide="users"></i> スタッフ管理
                     </button>
                     <button class="nav-item" data-tab="tab-points">
                         <i data-lucide="award"></i> 360度評価ポイント
@@ -142,8 +171,11 @@
                                 <span class="range-separator">〜</span>
                                 <input type="date" id="filter-end-date" class="form-control">
                             </div>
-                            <button id="btn-export-csv" class="btn btn-primary">
-                                <i data-lucide="download"></i> CSVエクスポート
+                            <button id="btn-export-csv" class="btn btn-secondary">
+                                <i data-lucide="file-text"></i> CSV
+                            </button>
+                            <button id="btn-open-excel-modal" class="btn btn-primary" style="background: linear-gradient(135deg, #107c41, #1e9d57); border-color: #107c41; box-shadow: 0 4px 12px rgba(16, 124, 65, 0.25);">
+                                <i data-lucide="file-spreadsheet"></i> 時間集計表（Excel）出力
                             </button>
                         </div>
                     </div>
@@ -158,6 +190,7 @@
                                     <th>休憩終了</th>
                                     <th>退勤</th>
                                     <th>実労働時間</th>
+                                    <th>残業理由</th>
                                     <th>獲得pt</th>
                                     <th>贈った相手</th>
                                     <th>贈ったpt</th>
@@ -167,6 +200,68 @@
                                 <!-- Dynamic rows -->
                             </tbody>
                         </table>
+                    </div>
+                </div>
+
+                <!-- Tab: 申請管理 (打刻修正・漏れ承認) -->
+                <div id="tab-requests" class="tab-panel">
+                    <div class="panel-header">
+                        <h2><i data-lucide="clipboard-check"></i> 打刻修正・ミスの申請管理</h2>
+                        <span class="helper-text" style="color: var(--text-muted); font-size: 0.9rem;">
+                            スタッフからの打刻修正依頼を確認・承認できます。承認すると打刻履歴・Excel出力に即時反映されます。
+                        </span>
+                    </div>
+
+                    <!-- 未承認の申請一覧 -->
+                    <div class="admin-card mb-4" style="background: white; border: 1px solid var(--border-color); margin-bottom: 2rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                            <h3 style="font-size: 1.1rem; color: #b45309; display: flex; align-items: center; gap: 0.5rem; margin: 0;">
+                                <i data-lucide="clock" style="color: #d97706;"></i> 未承認の修正申請
+                            </h3>
+                            <span id="pending-count-text" class="status-badge" style="background: #fef3c7; color: #b45309; font-weight: 700;">未承認 0件</span>
+                        </div>
+                        <div class="table-container">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>申請日時</th>
+                                        <th>スタッフ名</th>
+                                        <th>対象日</th>
+                                        <th>申請種別</th>
+                                        <th>修正後 (出勤〜退勤)</th>
+                                        <th>申請理由</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="pending-requests-table-body">
+                                    <!-- Dynamic pending rows -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- 処理済み（承認・却下）履歴 -->
+                    <div class="admin-card" style="background: white; border: 1px solid var(--border-color);">
+                        <h3 style="font-size: 1.05rem; margin-bottom: 1rem; color: var(--text-muted); display: flex; align-items: center; gap: 0.5rem;">
+                            <i data-lucide="history"></i> 過去の処理履歴
+                        </h3>
+                        <div class="table-container" style="max-height: 350px;">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>処理日時</th>
+                                        <th>スタッフ名</th>
+                                        <th>対象日</th>
+                                        <th>修正内容</th>
+                                        <th>申請理由</th>
+                                        <th>結果</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="processed-requests-table-body">
+                                    <!-- Dynamic processed rows -->
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
 
@@ -234,16 +329,22 @@
                                 </p>
                             </div>
 
-                            <h3>Googleスプレッドシート連携</h3>
+                            <h3>Googleスプレッドシート連携 (複数PC同期・自動バックアップ)</h3>
                             <div class="admin-form" style="background: white; padding: 1.25rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); margin-bottom: 1.5rem;">
                                 <div class="form-group">
                                     <label for="gas-url">GAS ウェブアプリ URL</label>
                                     <input type="url" id="gas-url" class="form-control" placeholder="https://script.google.com/macros/s/.../exec">
-                                    <p class="field-desc mt-1" style="font-size: 0.75rem; color: var(--text-muted);">
-                                        ※GoogleスプレッドシートのApps Scriptで発行したウェブアプリURLを入力します。
+                                    <p class="field-desc mt-1" style="font-size: 0.75rem; color: var(--text-muted); line-height: 1.4;">
+                                        ※個人のGoogleアカウントのスプレッドシートで発行したURLを貼り付けます。<br>
+                                        ※設定すると、複数PC間での打刻データ共有と自動バックアップが有効になります。
                                     </p>
                                 </div>
-                                <button id="btn-save-gas" class="btn btn-primary btn-full">URLを保存する</button>
+                                <div style="display: flex; gap: 0.5rem;">
+                                    <button id="btn-save-gas" class="btn btn-primary" style="flex: 1;">URLを保存</button>
+                                    <button id="btn-sync-now" class="btn btn-secondary" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 0.3rem;">
+                                        <i data-lucide="refresh-cw" style="width: 14px; height: 14px;"></i> 今すぐ同期
+                                    </button>
+                                </div>
                             </div>
 
                             <h3>ポイント手動調整</h3>
@@ -338,6 +439,26 @@
                 <p class="field-desc">獲得したポイントを他のスタッフに贈りましょう！</p>
             </div>
             <form id="form-peer-gift" class="modal-form">
+                <!-- 残業理由入力フィールド (残業時のみ表示) -->
+                <div id="overtime-reason-section" class="form-group hidden" style="background: #fffbeb; border: 1px solid #fde68a; border-radius: var(--radius-sm); padding: 0.85rem;">
+                    <label for="select-overtime-reason" style="color: #b45309; font-weight: 700; display: flex; align-items: center; gap: 0.4rem;">
+                        <i data-lucide="alert-circle" style="width: 16px; height: 16px;"></i> 残業理由の入力 (※必須)
+                    </label>
+                    <p style="font-size: 0.78rem; color: #92400e; margin-bottom: 0.5rem; line-height: 1.4;">
+                        本日は所定勤務時間を超えています。該当する業務内容を選択してください。
+                    </p>
+                    <select id="select-overtime-reason" class="form-control" style="border-color: #f59e0b; margin-bottom: 0.4rem;">
+                        <option value="">残業理由を選択してください...</option>
+                        <option value="急患・診療対応の延長">急患・診療対応の延長</option>
+                        <option value="カルテ・検査データ整理">カルテ・検査データ整理</option>
+                        <option value="レセプト・月末事務処理">レセプト・月末事務処理</option>
+                        <option value="院内清掃・器具滅菌・消毒">院内清掃・器具滅菌・消毒</option>
+                        <option value="スタッフ引き継ぎ・ミーティング">スタッフ引き継ぎ・ミーティング</option>
+                        <option value="その他">その他（下記に入力）</option>
+                    </select>
+                    <input type="text" id="overtime-reason-detail" class="form-control hidden" placeholder="具体的な理由を入力してください">
+                </div>
+
                 <div class="form-group">
                     <label for="select-gift-receiver">贈る相手</label>
                     <select id="select-gift-receiver" class="form-control" required>
@@ -359,9 +480,111 @@
         </div>
     </div>
 
+    <!-- 打刻修正・ミスの申請モーダル (スタッフ用) -->
+    <div id="modal-correction-request" class="modal">
+        <div class="modal-content" style="max-width: 480px;">
+            <div class="modal-header">
+                <i data-lucide="edit-3" class="lock-icon" style="background: #e0f2fe; color: var(--primary); margin: 0 auto 1rem auto; display: block; width: 3.5rem; height: 3.5rem; border-radius: 50%; padding: 0.75rem;"></i>
+                <h3>打刻修正・漏れの申請</h3>
+                <p class="field-desc">打刻忘れや修正が必要な日を管理者に申請します。管理者が承認すると反映されます。</p>
+            </div>
+            <form id="form-correction-request" class="modal-form">
+                <div class="form-group">
+                    <label>申請スタッフ</label>
+                    <div id="correction-staff-name" style="font-weight: 700; font-size: 1.05rem; color: var(--primary-dark); padding: 0.5rem 0.75rem; background: var(--bg-app); border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                        スタッフ名
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="correction-date">対象日付</label>
+                    <input type="date" id="correction-date" class="form-control" required>
+                </div>
+
+                <div class="form-group">
+                    <label>修正後の時刻 (入力分のみ修正されます)</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                        <div>
+                            <span style="font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 0.2rem;">正しい出勤</span>
+                            <input type="time" id="correction-checkin" class="form-control">
+                        </div>
+                        <div>
+                            <span style="font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 0.2rem;">正しい退勤</span>
+                            <input type="time" id="correction-checkout" class="form-control">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="correction-reason-select">申請理由</label>
+                    <select id="correction-reason-select" class="form-control" required>
+                        <option value="">理由を選択してください...</option>
+                        <option value="打刻忘れ（押し忘れ）">打刻忘れ（押し忘れ）</option>
+                        <option value="急患対応・電話対応で押し遅れ">急患対応・電話対応で押し遅れ</option>
+                        <option value="退勤時の押し忘れ">退勤時の押し忘れ</option>
+                        <option value="往診・直行直帰のため">往診・直行直帰のため</option>
+                        <option value="システム端末の不調">システム端末の不調</option>
+                        <option value="その他">その他（詳細を入力）</option>
+                    </select>
+                    <input type="text" id="correction-reason-detail" class="form-control hidden" placeholder="詳細な理由を入力してください" style="margin-top: 0.4rem;">
+                </div>
+
+                <div style="display: flex; gap: 0.75rem; margin-top: 1.5rem;">
+                    <button type="button" id="btn-close-correction-modal" class="btn btn-secondary" style="flex: 1;">キャンセル</button>
+                    <button type="submit" class="btn btn-primary" style="flex: 2;">
+                        <i data-lucide="send"></i> 申請を送信する
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Excel Export Modal -->
+    <div id="modal-excel-export" class="modal">
+        <div class="modal-content" style="max-width: 480px;">
+            <div class="modal-header">
+                <i data-lucide="file-spreadsheet" class="lock-icon" style="background: #e8f5e9; color: #107c41; margin: 0 auto 1rem auto; display: block; width: 3.5rem; height: 3.5rem; border-radius: 50%; padding: 0.75rem;"></i>
+                <h3>時間集計表（Excel）出力</h3>
+                <p class="field-desc">給与計算用エクセルファイルをワンクリックで自動生成します。</p>
+            </div>
+            <form id="form-excel-export" class="modal-form">
+                <div class="form-group">
+                    <label for="excel-target-month">集計対象月度</label>
+                    <div style="display: flex; gap: 0.5rem; align-items: center;">
+                        <select id="excel-target-year" class="form-control" style="flex: 1.2; font-weight: 500;"></select>
+                        <span>年</span>
+                        <select id="excel-target-month" class="form-control" style="flex: 1; font-weight: 500;"></select>
+                        <span>月度</span>
+                    </div>
+                    <div id="excel-period-preview" style="font-size: 0.85rem; color: #107c41; font-weight: 600; margin-top: 0.5rem; padding: 0.6rem 0.8rem; background: #e8f5e9; border-radius: var(--radius-sm); border-left: 4px solid #107c41;">
+                        対象期間: 令和8年9月16日 〜 令和8年10月15日
+                    </div>
+                </div>
+                
+                <div class="form-group" style="background: #f8fafc; border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 0.85rem; font-size: 0.85rem; line-height: 1.6;">
+                    <div style="font-weight: 600; color: var(--text-main); margin-bottom: 0.3rem;">📋 自動処理される内容:</div>
+                    <ul style="padding-left: 1.2rem; color: var(--text-muted); margin: 0;">
+                        <li><strong>1枚目（セット）</strong>: 期間（〇年〇月16日〜翌月15日）を自動設定</li>
+                        <li><strong>全スタッフシート</strong>: 午前診（13時前）・午後診（13時以降）を自動判定して打刻（1000等の形式）を転記</li>
+                        <li><strong>感謝ポイント一覧シート</strong>: 獲得・贈呈ptや感謝メッセージ履歴を自動集計</li>
+                    </ul>
+                </div>
+
+                <div style="display: flex; gap: 0.75rem; margin-top: 1.5rem;">
+                    <button type="button" id="btn-close-excel-modal" class="btn btn-secondary" style="flex: 1;">閉じる</button>
+                    <button type="submit" id="btn-do-excel-export" class="btn btn-primary" style="flex: 2; background: #107c41; border-color: #107c41; display: flex; align-items: center; justify-content: center; gap: 0.4rem;">
+                        <i data-lucide="download"></i> Excelを出力
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Toast Notification Container -->
     <div id="toast-container" class="toast-container"></div>
 
+    <script src="exceljs.min.js"></script>
+    <script src="excel-template.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

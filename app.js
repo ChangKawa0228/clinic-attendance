@@ -67,11 +67,19 @@ document.addEventListener('DOMContentLoaded', () => {
         'st-14': { current: 0, lifetime: 0 }
     });
     let pointLogs = store.get('point_logs', []);
+    let correctionRequests = store.get('correction_requests', []);
+    const CURRENT_OFFICIAL_GAS_URL = 'https://script.google.com/macros/s/AKfycbyfNtM-cdfrouAinYj4DAHRm8xgG6Ms7erztGwF9AHJ4QmCL6ZVNr1tWl83hEihm7gSTw/exec';
     let settings = store.get('settings', {
         pointRate: 10, // points per hour
         adminPassword: 'admin',
-        gasUrl: ''
+        gasUrl: CURRENT_OFFICIAL_GAS_URL
     });
+
+    // 最新のGAS URLへ更新（古いURLや空文字が残っている場合の自動アップデート）
+    if (!settings.gasUrl || settings.gasUrl.indexOf('AKfycbyfNtM') === -1) {
+        settings.gasUrl = CURRENT_OFFICIAL_GAS_URL;
+        store.set('settings', settings);
+    }
 
     // マイグレーション：古いテスト用スタッフ「佐藤 健」が残っている場合、実在スタッフへ強制リセットする
     if (staffs.some(s => s.name === '佐藤 健')) {
@@ -150,7 +158,18 @@ document.addEventListener('DOMContentLoaded', () => {
         filterStartDate: document.getElementById('filter-start-date'),
         filterEndDate: document.getElementById('filter-end-date'),
         btnExportCsv: document.getElementById('btn-export-csv'),
+        btnOpenExcelModal: document.getElementById('btn-open-excel-modal'),
+        btnSidebarExcelExport: document.getElementById('btn-sidebar-excel-export'),
         recordsTableBody: document.getElementById('records-table-body'),
+        
+        // Excel Export Modal
+        modalExcelExport: document.getElementById('modal-excel-export'),
+        btnCloseExcelModal: document.getElementById('btn-close-excel-modal'),
+        formExcelExport: document.getElementById('form-excel-export'),
+        excelTargetYear: document.getElementById('excel-target-year'),
+        excelTargetMonth: document.getElementById('excel-target-month'),
+        excelPeriodPreview: document.getElementById('excel-period-preview'),
+        btnDoExcelExport: document.getElementById('btn-do-excel-export'),
         
         // Admin: Staff management
         formAddStaff: document.getElementById('form-add-staff'),
@@ -183,7 +202,34 @@ document.addEventListener('DOMContentLoaded', () => {
         selectGiftReceiver: document.getElementById('select-gift-receiver'),
         selectGiftAmount: document.getElementById('select-gift-amount'),
         giftMessage: document.getElementById('gift-message'),
+        overtimeReasonSection: document.getElementById('overtime-reason-section'),
+        selectOvertimeReason: document.getElementById('select-overtime-reason'),
+        overtimeReasonDetail: document.getElementById('overtime-reason-detail'),
         
+        // Correction Request (Staff)
+        btnOpenCorrectionModal: document.getElementById('btn-open-correction-modal'),
+        modalCorrectionRequest: document.getElementById('modal-correction-request'),
+        btnCloseCorrectionModal: document.getElementById('btn-close-correction-modal'),
+        formCorrectionRequest: document.getElementById('form-correction-request'),
+        correctionStaffName: document.getElementById('correction-staff-name'),
+        correctionDate: document.getElementById('correction-date'),
+        correctionCheckin: document.getElementById('correction-checkin'),
+        correctionCheckout: document.getElementById('correction-checkout'),
+        correctionReasonSelect: document.getElementById('correction-reason-select'),
+        correctionReasonDetail: document.getElementById('correction-reason-detail'),
+
+        // Admin: Correction Requests Management
+        badgePendingRequests: document.getElementById('badge-pending-requests'),
+        pendingCountText: document.getElementById('pending-count-text'),
+        pendingRequestsTableBody: document.getElementById('pending-requests-table-body'),
+        processedRequestsTableBody: document.getElementById('processed-requests-table-body'),
+        
+        // Cloud Sync Elements
+        cloudSyncPill: document.getElementById('cloud-sync-pill'),
+        cloudSyncIcon: document.getElementById('cloud-sync-icon'),
+        syncStatusText: document.getElementById('sync-status-text'),
+        btnSyncNow: document.getElementById('btn-sync-now'),
+
         // Toast
         toastContainer: document.getElementById('toast-container')
     };
@@ -444,6 +490,7 @@ document.addEventListener('DOMContentLoaded', () => {
         saveState();
         renderStaffGrid();
         updateControlPanelState(staff);
+        syncWithGoogleSheets(true);
         showToast(`${staff.name}さん、おはようございます。出勤を記録しました。`, 'success');
     });
 
@@ -483,6 +530,7 @@ document.addEventListener('DOMContentLoaded', () => {
         saveState();
         renderStaffGrid();
         updateControlPanelState(staff);
+        syncWithGoogleSheets(true);
     });
 
     // Temporary storage for staff checkout waiting for peer point gift assignment
@@ -546,44 +594,86 @@ document.addEventListener('DOMContentLoaded', () => {
         record.peerReceiverId = null;
         record.peerReceiverName = null;
         record.peerPoints = 0;
+        record.overtimeReason = null;
 
-        // If earned points, intercept checkout to show 360 degree feedback gift modal
-        if (pointsEarned > 0) {
-            pendingCheckout = { staff, record, pointsEarned };
-            
-            // Populate peer gift modal fields
-            elements.peerGiftMessage.textContent = `本日の勤務で ${pointsEarned} ポイント獲得しました。`;
-            
-            // Populate receivers (excluding self)
-            elements.selectGiftReceiver.innerHTML = '<option value="">スタッフを選択...</option>';
-            staffs.filter(s => s.id !== staff.id).forEach(s => {
-                const opt = document.createElement('option');
-                opt.value = s.id;
-                opt.textContent = s.name;
-                elements.selectGiftReceiver.appendChild(opt);
-            });
+        // Check Overtime Condition (8時間超、または18:30以降の退勤)
+        const nowHour = now.getHours();
+        const nowMin = now.getMinutes();
+        const isLate = (nowHour > 18) || (nowHour === 18 && nowMin >= 30);
+        const isOvertime = workMinutes >= 480 || isLate;
 
-            // Populate points select (0 to pointsEarned)
-            elements.selectGiftAmount.innerHTML = '';
-            for (let i = pointsEarned; i >= 0; i--) {
-                const opt = document.createElement('option');
-                opt.value = i;
-                opt.textContent = `${i} pt`;
-                elements.selectGiftAmount.appendChild(opt);
+        // If earned points OR overtime, open modal to input gift and/or overtime reason
+        if (pointsEarned > 0 || isOvertime) {
+            pendingCheckout = { staff, record, pointsEarned, isOvertime };
+            
+            // Overtime Section visibility
+            if (isOvertime) {
+                elements.overtimeReasonSection.classList.remove('hidden');
+                elements.selectOvertimeReason.value = '';
+                elements.overtimeReasonDetail.value = '';
+                elements.overtimeReasonDetail.classList.add('hidden');
+            } else {
+                elements.overtimeReasonSection.classList.add('hidden');
+                elements.selectOvertimeReason.value = '';
             }
-            elements.selectGiftReceiver.required = true; // default points is > 0
 
-            // Show gift modal
+            // Populate peer gift modal fields
+            if (pointsEarned > 0) {
+                elements.peerGiftMessage.textContent = `本日の勤務で ${pointsEarned} ポイント獲得しました。`;
+                elements.selectGiftReceiver.parentElement.classList.remove('hidden');
+                elements.selectGiftAmount.parentElement.classList.remove('hidden');
+                elements.giftMessage.parentElement.classList.remove('hidden');
+                
+                // Populate receivers (excluding self)
+                elements.selectGiftReceiver.innerHTML = '<option value="">スタッフを選択...</option>';
+                staffs.filter(s => s.id !== staff.id).forEach(s => {
+                    const opt = document.createElement('option');
+                    opt.value = s.id;
+                    opt.textContent = s.name;
+                    elements.selectGiftReceiver.appendChild(opt);
+                });
+
+                // Populate points select (0 to pointsEarned)
+                elements.selectGiftAmount.innerHTML = '';
+                for (let i = pointsEarned; i >= 0; i--) {
+                    const opt = document.createElement('option');
+                    opt.value = i;
+                    opt.textContent = `${i} pt`;
+                    elements.selectGiftAmount.appendChild(opt);
+                }
+                elements.selectGiftReceiver.required = true;
+            } else {
+                elements.peerGiftMessage.textContent = `本日の勤務時間: ${(workMinutes / 60).toFixed(1)} 時間`;
+                elements.selectGiftReceiver.parentElement.classList.add('hidden');
+                elements.selectGiftAmount.parentElement.classList.add('hidden');
+                elements.giftMessage.parentElement.classList.add('hidden');
+                elements.selectGiftReceiver.required = false;
+            }
+
+            // Show modal
             elements.modalPeerGift.classList.add('active');
+            if (window.lucide) window.lucide.createIcons();
             closeControlPanel();
             renderStaffGrid();
         } else {
-            // Instant checkout with no points
+            // Instant checkout with no points and no overtime
             saveState();
             renderStaffGrid();
             closeControlPanel();
-            sendToGoogleSheets(record);
-            showToast(`${staff.name}さん、お疲れ様でした。退勤を記録しました。(勤務時間: ${(workMinutes/60).toFixed(1)}時間、ポイント獲得なし)`, 'success');
+            syncWithGoogleSheets(true);
+            showToast(`${staff.name}さん、お疲れ様でした。退勤を記録しました。(勤務時間: ${(workMinutes/60).toFixed(1)}時間)`, 'success');
+        }
+    });
+
+    // Toggle overtime detail input when 'その他' is chosen
+    elements.selectOvertimeReason.addEventListener('change', () => {
+        if (elements.selectOvertimeReason.value === 'その他') {
+            elements.overtimeReasonDetail.classList.remove('hidden');
+            elements.overtimeReasonDetail.required = true;
+            elements.overtimeReasonDetail.focus();
+        } else {
+            elements.overtimeReasonDetail.classList.add('hidden');
+            elements.overtimeReasonDetail.required = false;
         }
     });
 
@@ -598,10 +688,28 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
         if (!pendingCheckout) return;
 
-        const { staff, record, pointsEarned } = pendingCheckout;
+        const { staff, record, pointsEarned, isOvertime } = pendingCheckout;
         const receiverId = elements.selectGiftReceiver.value;
-        const giftPoints = parseInt(elements.selectGiftAmount.value, 10);
+        const giftPoints = parseInt(elements.selectGiftAmount.value, 10) || 0;
         const msg = elements.giftMessage.value.trim();
+
+        // Overtime reason handling
+        if (isOvertime) {
+            let reasonVal = elements.selectOvertimeReason.value;
+            if (!reasonVal) {
+                showToast('残業理由を選択してください。', 'warning');
+                return;
+            }
+            if (reasonVal === 'その他') {
+                const detail = elements.overtimeReasonDetail.value.trim();
+                if (!detail) {
+                    showToast('具体的な残業理由を入力してください。', 'warning');
+                    return;
+                }
+                reasonVal = `その他: ${detail}`;
+            }
+            record.overtimeReason = reasonVal;
+        }
 
         if (giftPoints > 0) {
             if (!receiverId) {
@@ -639,7 +747,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Save state and update UI
         saveState();
         renderStaffGrid();
-        sendToGoogleSheets(record);
+        syncWithGoogleSheets(true);
 
         // Close modal and reset form fields
         elements.modalPeerGift.classList.remove('active');
@@ -651,9 +759,9 @@ document.addEventListener('DOMContentLoaded', () => {
         pendingCheckout = null;
 
         if (giftPoints > 0) {
-            showToast(`${staff.name}さんの退勤を記録し、${giftReceiverName}さんへ ${giftPoints}pt を贈りました！`, 'success');
+            showToast(`${staff.name}さんの退勤を記録し、${giftReceiverName}さんへ ${giftPoints}pt を贈りました！${record.overtimeReason ? ' (残業理由を記録済)' : ''}`, 'success');
         } else {
-            showToast(`${staff.name}さんの退勤を記録しました。(ポイントは贈りませんでした)`, 'success');
+            showToast(`${staff.name}さんの退勤を記録しました。${record.overtimeReason ? ' (残業理由を記録済)' : ''}`, 'success');
         }
     });
 
@@ -669,32 +777,173 @@ document.addEventListener('DOMContentLoaded', () => {
         store.set('records', records);
         store.set('point_ledger', pointLedger);
         store.set('point_logs', pointLogs);
+        store.set('correction_requests', correctionRequests);
         store.set('settings', settings);
     }
 
-    // Send attendance & points data to Google Sheets via GAS
-    function sendToGoogleSheets(record) {
+    // ==========================================================================
+    // Cloud Sync Module (Google Apps Script - Bidirectional)
+    // ==========================================================================
+    let isSyncing = false;
+
+    function setSyncStatus(status, text) {
+        if (!elements.cloudSyncPill || !elements.syncStatusText) return;
+        elements.cloudSyncPill.className = 'cloud-sync-pill ' + status;
+        elements.syncStatusText.textContent = text;
+        if (window.lucide) window.lucide.createIcons();
+    }
+
+    async function syncWithGoogleSheets(isBackground = false) {
         if (!settings.gasUrl) {
-            console.log("GAS URL is not configured. Skipping Google Sheets upload.");
+            setSyncStatus('idle', 'クラウド未連携');
             return;
         }
 
-        fetch(settings.gasUrl, {
-            method: 'POST',
-            mode: 'no-cors',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(record)
-        })
-        .then(() => {
-            console.log("Successfully queued send to Google Sheets.");
-            showToast("Googleスプレッドシートへ同期しました。", "success");
-        })
-        .catch(err => {
-            console.error("Failed to send data to Google Sheets:", err);
-            showToast("スプレッドシート同期に失敗しました。", "warning");
-        });
+        // URL形式の簡易チェック
+        if (!settings.gasUrl.includes('/exec')) {
+            setSyncStatus('error', 'URL形式エラー');
+            if (!isBackground) {
+                showToast('GASのURLが正しくありません。末尾が「/exec」のウェブアプリURLを貼り付けてください。', 'warning');
+            }
+            return;
+        }
+
+        if (isSyncing) return;
+        isSyncing = true;
+        setSyncStatus('syncing', '同期中...');
+
+        const payload = {
+            action: 'sync_all',
+            records: records,
+            pointLedger: pointLedger,
+            pointLogs: pointLogs,
+            correctionRequests: correctionRequests
+        };
+
+        const jsonStr = JSON.stringify(payload);
+
+        try {
+            // 方法1: text/plain で生のJSONを送信
+            // ※ブラウザの仕様上、text/plain はプリフライト(OPTIONS)を発生させずに直接GASへ届きます
+            const res = await fetch(settings.gasUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'text/plain;charset=utf-8'
+                },
+                body: jsonStr
+            });
+
+            if (res.ok) {
+                try {
+                    const result = await res.json();
+                    if (result.success && result.data) {
+                        mergeCloudData(result.data);
+                    }
+                } catch (jsonErr) {
+                    // レスポンスのJSONパース失敗時も送信自体は成功している場合がある
+                }
+            }
+
+            const nowTime = new Date().toTimeString().substring(0, 5);
+            setSyncStatus('synced', `同期済 ${nowTime}`);
+            if (!isBackground) {
+                showToast('Googleスプレッドシートへ打刻データを反映しました！', 'success');
+            }
+        } catch (err) {
+            console.warn("GAS direct sync failed, attempting no-cors fallback:", err);
+            // 方法2: no-cors 送信 (ブラウザのCORS制限を完全回避)
+            try {
+                await fetch(settings.gasUrl, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: {
+                        'Content-Type': 'text/plain;charset=utf-8'
+                    },
+                    body: jsonStr
+                });
+                const nowTime = new Date().toTimeString().substring(0, 5);
+                setSyncStatus('synced', `送信済 ${nowTime}`);
+                if (!isBackground) {
+                    showToast('スプレッドシートへ送信しました。数秒後にシートをご確認ください。', 'success');
+                }
+            } catch (err2) {
+                console.error("GAS sync failed completely:", err2);
+                setSyncStatus('error', '同期失敗');
+                if (!isBackground) {
+                    showToast('同期に失敗しました。URLをご確認ください。', 'warning');
+                }
+            }
+        } finally {
+            isSyncing = false;
+        }
+    }
+
+    function mergeCloudData(cloudData) {
+        if (!cloudData) return;
+        let hasChanges = false;
+
+        // 1. Recordsマージ
+        if (Array.isArray(cloudData.records) && cloudData.records.length > 0) {
+            const localMap = new Map();
+            records.forEach(r => localMap.set(r.id || `${r.date}-${r.staffId}`, r));
+
+            cloudData.records.forEach(cloudRec => {
+                const key = cloudRec.id || `${cloudRec.date}-${cloudRec.staffId}`;
+                if (!localMap.has(key)) {
+                    records.push(cloudRec);
+                    hasChanges = true;
+                } else {
+                    const localRec = localMap.get(key);
+                    if (cloudRec.isCorrected && !localRec.isCorrected) {
+                        Object.assign(localRec, cloudRec);
+                        hasChanges = true;
+                    }
+                }
+            });
+        }
+
+        // 2. Correction Requestsマージ
+        if (Array.isArray(cloudData.correctionRequests) && cloudData.correctionRequests.length > 0) {
+            const reqMap = new Map();
+            correctionRequests.forEach(q => reqMap.set(q.id, q));
+
+            cloudData.correctionRequests.forEach(cloudReq => {
+                if (!reqMap.has(cloudReq.id)) {
+                    correctionRequests.push(cloudReq);
+                    hasChanges = true;
+                } else {
+                    const localReq = reqMap.get(cloudReq.id);
+                    if (cloudReq.status !== localReq.status) {
+                        localReq.status = cloudReq.status;
+                        localReq.processedAt = cloudReq.processedAt;
+                        hasChanges = true;
+                    }
+                }
+            });
+        }
+
+        // 3. Point Ledgerマージ
+        if (cloudData.pointLedger && typeof cloudData.pointLedger === 'object') {
+            for (const stId in cloudData.pointLedger) {
+                if (!pointLedger[stId]) {
+                    pointLedger[stId] = cloudData.pointLedger[stId];
+                    hasChanges = true;
+                } else {
+                    if (cloudData.pointLedger[stId].current > pointLedger[stId].current) {
+                        pointLedger[stId].current = cloudData.pointLedger[stId].current;
+                        hasChanges = true;
+                    }
+                }
+            }
+        }
+
+        if (hasChanges) {
+            saveState();
+            renderStaffGrid();
+            renderRecordsTable();
+            renderRequestsTables();
+            updatePendingBadge();
+        }
     }
 
     // ==========================================================================
@@ -758,6 +1007,7 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.mainAdmin.classList.remove('hidden');
         elements.btnAdminNav.classList.add('hidden');
         
+        updatePendingBadge();
         // Initial tab render
         refreshAdminTab('tab-records');
         // Reset nav states
@@ -770,6 +1020,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function refreshAdminTab(tabId) {
         if (tabId === 'tab-records') {
             renderRecordsTable();
+        } else if (tabId === 'tab-requests') {
+            renderRequestsTables();
         } else if (tabId === 'tab-staff-management') {
             renderAdminStaffTable();
         } else if (tabId === 'tab-points') {
@@ -810,20 +1062,26 @@ document.addEventListener('DOMContentLoaded', () => {
         filteredRecords.forEach(r => {
             const tr = document.createElement('tr');
             const hrs = (r.duration / 60).toFixed(1);
+            const overtimeBadge = r.overtimeReason 
+                ? `<span class="overtime-tag" title="${escapeHTML(r.overtimeReason)}"><i data-lucide="clock" style="width:12px;height:12px;"></i> ${escapeHTML(r.overtimeReason)}</span>` 
+                : '-';
+
             tr.innerHTML = `
-                <td>${r.date}</td>
+                <td>${r.date}${r.isCorrected ? ' <span style="font-size:0.7rem; color:var(--primary); font-weight:700;">[修正済]</span>' : ''}</td>
                 <td style="font-weight: 600;">${r.staffName}</td>
                 <td><span class="time-val">${r.checkin || '-'}</span></td>
                 <td><span class="time-val">${r.breakStart || '-'}</span></td>
                 <td><span class="time-val">${r.breakEnd || '-'}</span></td>
                 <td><span class="time-val">${r.checkout || '-'}</span></td>
                 <td>${r.checkout ? `${hrs} 時間 (${r.duration}分)` : '-'}</td>
+                <td>${overtimeBadge}</td>
                 <td style="font-weight: 600; color: var(--primary-dark);">${r.points ? `+${r.points} pt` : '-'}</td>
                 <td style="font-weight: 600;">${r.peerReceiverName || '-'}</td>
                 <td style="font-weight: 600; color: var(--warning);">${r.peerPoints ? `-${r.peerPoints} pt` : '-'}</td>
             `;
             elements.recordsTableBody.appendChild(tr);
         });
+        if (window.lucide) window.lucide.createIcons();
     }
 
     // Export CSV (Filtered by selected range)
@@ -845,7 +1103,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // CSV Header
         let csvContent = '\uFEFF'; // UTF-8 BOM to prevent Excel encoding issues
-        csvContent += '日付,スタッフ名,出勤時刻,休憩開始時刻,休憩終了時刻,退勤時刻,実労働時間(分),獲得ポイント,贈った相手,贈ったポイント\r\n';
+        csvContent += '日付,スタッフ名,出勤時刻,休憩開始時刻,休憩終了時刻,退勤時刻,実労働時間(分),残業理由,獲得ポイント,贈った相手,贈ったポイント\r\n';
 
         filteredRecords.forEach(r => {
             const row = [
@@ -856,6 +1114,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 r.breakEnd || '',
                 r.checkout || '',
                 r.duration || 0,
+                r.overtimeReason || '',
                 r.points || 0,
                 r.peerReceiverName || '',
                 r.peerPoints || 0
@@ -876,6 +1135,766 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.removeChild(link);
         showToast('CSVエクスポートが完了しました。', 'success');
     });
+
+    // ==========================================================================
+    // Admin Module: Excel (時間集計表.xlsx) Export & Direct Sync
+    // ==========================================================================
+    
+    // Initialize Target Year/Month Selects
+    function initExcelExportModal() {
+        const now = new Date();
+        const curYear = now.getFullYear();
+        const curMonth = now.getMonth() + 1;
+        const curDate = now.getDate();
+
+        // 締め日判定: 16日以降なら翌月度、15日以前なら当月度
+        let defaultYear = curYear;
+        let defaultMonth = curMonth;
+        if (curDate >= 16) {
+            defaultMonth += 1;
+            if (defaultMonth > 12) {
+                defaultMonth = 1;
+                defaultYear += 1;
+            }
+        }
+
+        // Years option (前年〜翌年)
+        elements.excelTargetYear.innerHTML = '';
+        for (let y = curYear - 1; y <= curYear + 2; y++) {
+            const opt = document.createElement('option');
+            opt.value = y;
+            opt.textContent = `${y} (${y - 2018 >= 1 ? `令和${y - 2018}` : ''})`;
+            if (y === defaultYear) opt.selected = true;
+            elements.excelTargetYear.appendChild(opt);
+        }
+
+        // Months option (1〜12)
+        elements.excelTargetMonth.innerHTML = '';
+        for (let m = 1; m <= 12; m++) {
+            const opt = document.createElement('option');
+            opt.value = m;
+            opt.textContent = m;
+            if (m === defaultMonth) opt.selected = true;
+            elements.excelTargetMonth.appendChild(opt);
+        }
+
+        updateExcelPeriodPreview();
+    }
+
+    function calculateExcelPeriod(targetYear, targetMonth) {
+        // 対象月度 (targetYear年 targetMonth月度)
+        // 開始日: 前月16日、終了日: 当月15日
+        let startYear = targetYear;
+        let startMonth = targetMonth - 1;
+        if (startMonth < 1) {
+            startMonth = 12;
+            startYear -= 1;
+        }
+        const endYear = targetYear;
+        const endMonth = targetMonth;
+
+        const startReiwa = startYear - 2018;
+        const endReiwa = endYear - 2018;
+
+        return {
+            startYear,
+            startMonth,
+            startDay: 16,
+            startReiwa,
+            startDateStr: `${startYear}-${String(startMonth).padStart(2, '0')}-16`,
+            endYear,
+            endMonth,
+            endDay: 15,
+            endReiwa,
+            endDateStr: `${endYear}-${String(endMonth).padStart(2, '0')}-15`
+        };
+    }
+
+    function updateExcelPeriodPreview() {
+        const y = parseInt(elements.excelTargetYear.value, 10);
+        const m = parseInt(elements.excelTargetMonth.value, 10);
+        if (!y || !m) return;
+
+        const period = calculateExcelPeriod(y, m);
+        elements.excelPeriodPreview.textContent = 
+            `対象期間: 令和${period.startReiwa}年${period.startMonth}月16日 〜 令和${period.endReiwa}年${period.endMonth}月15日 (${m}月度)`;
+    }
+
+    elements.excelTargetYear.addEventListener('change', updateExcelPeriodPreview);
+    elements.excelTargetMonth.addEventListener('change', updateExcelPeriodPreview);
+
+    function openExcelExportModal() {
+        initExcelExportModal();
+        elements.modalExcelExport.classList.add('active');
+        if (window.lucide) window.lucide.createIcons();
+    }
+
+    if (elements.btnOpenExcelModal) {
+        elements.btnOpenExcelModal.addEventListener('click', openExcelExportModal);
+    }
+    if (elements.btnSidebarExcelExport) {
+        elements.btnSidebarExcelExport.addEventListener('click', openExcelExportModal);
+    }
+
+    elements.btnCloseExcelModal.addEventListener('click', () => {
+        elements.modalExcelExport.classList.remove('active');
+    });
+
+    // Helper: Base64 to ArrayBuffer
+    function base64ToArrayBuffer(base64) {
+        const binaryString = window.atob(base64);
+        const len = binaryString.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+        }
+        return bytes.buffer;
+    }
+
+    // Helper: HH:MM to 4-digit number (e.g. "09:45" -> 945, "13:55" -> 1355)
+    function timeStrToNumber(timeStr) {
+        if (!timeStr) return null;
+        const parts = timeStr.split(':');
+        if (parts.length < 2) return null;
+        const h = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10);
+        if (isNaN(h) || isNaN(m)) return null;
+        return h * 100 + m;
+    }
+
+    // Excel Export Submit Handler
+    elements.formExcelExport.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        if (typeof ExcelJS === 'undefined') {
+            showToast('Excel生成ライブラリ (ExcelJS) が読み込まれていません。', 'warning');
+            return;
+        }
+
+        if (!window.DEFAULT_EXCEL_TEMPLATE_BASE64) {
+            showToast('Excelテンプレートファイルが見つかりません。', 'warning');
+            return;
+        }
+
+        const targetYear = parseInt(elements.excelTargetYear.value, 10);
+        const targetMonth = parseInt(elements.excelTargetMonth.value, 10);
+        const period = calculateExcelPeriod(targetYear, targetMonth);
+
+        const btnSubmit = elements.btnDoExcelExport;
+        const originalBtnHTML = btnSubmit.innerHTML;
+        btnSubmit.disabled = true;
+        btnSubmit.innerHTML = `<i data-lucide="loader" class="spin"></i> 生成中...`;
+
+        try {
+            // 1. テンプレートからWorkbookを復元
+            const workbook = new ExcelJS.Workbook();
+            const templateBuffer = base64ToArrayBuffer(window.DEFAULT_EXCEL_TEMPLATE_BASE64);
+            await workbook.xlsx.load(templateBuffer);
+
+            // 2. 1枚目「【セット】」シートに期間を設定
+            const setSheet = workbook.getWorksheet('【セット】');
+            if (setSheet) {
+                // E6: 令和の年, G6: 開始月, I6: 16
+                setSheet.getCell('E6').value = period.startReiwa;
+                setSheet.getCell('G6').value = period.startMonth;
+                setSheet.getCell('I6').value = 16;
+                // E8: 令和の年, G8: 終了月, I8: 15
+                setSheet.getCell('E8').value = period.endReiwa;
+                setSheet.getCell('G8').value = period.endMonth;
+                setSheet.getCell('I8').value = 15;
+            }
+
+            // 3. 対象期間の日付配列を作成 (16日 〜 翌月15日)
+            const dateList = [];
+            const curDate = new Date(period.startYear, period.startMonth - 1, 16);
+            const endDate = new Date(period.endYear, period.endMonth - 1, 15);
+            while (curDate <= endDate) {
+                const y = curDate.getFullYear();
+                const m = String(curDate.getMonth() + 1).padStart(2, '0');
+                const d = String(curDate.getDate()).padStart(2, '0');
+                dateList.push(`${y}-${m}-${d}`);
+                curDate.setDate(curDate.getDate() + 1);
+            }
+
+            // 4. 各スタッフのシートに打刻データを書き込み
+            // 既存のシート一覧を取得
+            workbook.eachSheet((worksheet) => {
+                const sheetName = worksheet.name;
+                // 【セット】や感謝ポイント一覧などは除外
+                if (sheetName === '【セット】' || sheetName === '感謝ポイント一覧') return;
+
+                // 該当スタッフをマッチング (氏名にシート名が含まれている、または名字が一致)
+                const matchedStaff = staffs.find(s => {
+                    const cleanSheet = sheetName.trim();
+                    const cleanStaff = s.name.trim();
+                    return cleanStaff.includes(cleanSheet) || cleanSheet.includes(cleanStaff.split(' ')[0]);
+                });
+
+                // 該当シートの行6〜行36の既存打刻データを一旦クリア
+                for (let r = 6; r <= 36; r++) {
+                    worksheet.getCell(`O${r}`).value = null; // 午前 出
+                    worksheet.getCell(`P${r}`).value = null; // 午前 退
+                    worksheet.getCell(`U${r}`).value = null; // 午後 出
+                    worksheet.getCell(`V${r}`).value = null; // 午後 退
+                }
+
+                if (matchedStaff) {
+                    // 日付ごとに打刻レコードを反映
+                    dateList.forEach((dateStr, idx) => {
+                        const rowNum = 6 + idx;
+                        if (rowNum > 36) return;
+
+                        // 当日の該当スタッフのレコードを抽出
+                        const dayRecords = records.filter(r => 
+                            (r.staffId === matchedStaff.id || r.staffName === matchedStaff.name) && 
+                            r.date === dateStr
+                        );
+
+                        dayRecords.forEach(rec => {
+                            if (!rec.checkin) return;
+                            const checkinNum = timeStrToNumber(rec.checkin);
+                            const checkoutNum = timeStrToNumber(rec.checkout);
+                            if (checkinNum === null) return;
+
+                            const hour = parseInt(rec.checkin.split(':')[0], 10);
+
+                            if (hour < 13) {
+                                // 13時未満: 午前診 (O列: 出, P列: 退)
+                                worksheet.getCell(`O${rowNum}`).value = checkinNum;
+                                if (checkoutNum !== null) {
+                                    worksheet.getCell(`P${rowNum}`).value = checkoutNum;
+                                }
+                            } else {
+                                // 13時以降: 午後診 (U列: 出, V列: 退)
+                                worksheet.getCell(`U${rowNum}`).value = checkinNum;
+                                if (checkoutNum !== null) {
+                                    worksheet.getCell(`V${rowNum}`).value = checkoutNum;
+                                }
+                            }
+                        });
+                    });
+                }
+            });
+
+            // 5. 【A案】新シート「感謝ポイント一覧」の自動作成・整形
+            let ptSheet = workbook.getWorksheet('感謝ポイント一覧');
+            if (ptSheet) {
+                workbook.removeWorksheet(ptSheet.id);
+            }
+            ptSheet = workbook.addWorksheet('感謝ポイント一覧');
+
+            // シート全体のフォント設定・グリッド表示
+            ptSheet.views = [{ showGridLines: true }];
+
+            // 列幅設定
+            ptSheet.columns = [
+                { width: 5 },   // A: 余白
+                { width: 22 },  // B: スタッフ名 / 日付
+                { width: 18 },  // C: 期間内獲得pt / 贈り元
+                { width: 18 },  // D: 期間内贈呈pt / 贈り先
+                { width: 18 },  // E: 現在保有pt / ポイント
+                { width: 40 }   // F: 累計獲得pt / 感謝メッセージ
+            ];
+
+            // タイトル
+            ptSheet.mergeCells('B2:F2');
+            const titleCell = ptSheet.getCell('B2');
+            titleCell.value = 'Clinic Flow - 感謝ポイント（ピアボーナス）集計表';
+            titleCell.font = { name: 'Meiryo', size: 16, bold: true, color: { argb: 'FF0D3C61' } };
+
+            ptSheet.mergeCells('B3:F3');
+            const subTitleCell = ptSheet.getCell('B3');
+            subTitleCell.value = `集計対象期間: 令和${period.startReiwa}年${period.startMonth}月16日 〜 令和${period.endReiwa}年${period.endMonth}月15日 (${targetMonth}月度)`;
+            subTitleCell.font = { name: 'Meiryo', size: 11, color: { argb: 'FF475569' } };
+
+            // セクション1: スタッフ別集計表
+            ptSheet.getCell('B5').value = '【スタッフ別 ポイント獲得・贈呈状況】';
+            ptSheet.getCell('B5').font = { name: 'Meiryo', size: 12, bold: true, color: { argb: 'FF1E293B' } };
+
+            const staffHeaders = ['スタッフ名', '期間内 獲得pt', '期間内 贈呈pt', '現在 保有pt', '累計 獲得pt'];
+            const headerRow = ptSheet.getRow(6);
+            staffHeaders.forEach((h, i) => {
+                const cell = headerRow.getCell(i + 2);
+                cell.value = h;
+                cell.font = { name: 'Meiryo', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+                cell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FF0284C7' } // Blue primary
+                };
+                cell.alignment = { vertical: 'middle', horizontal: i === 0 ? 'left' : 'right' };
+                cell.border = {
+                    top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+                    left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+                    bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+                    right: { style: 'thin', color: { argb: 'FFCBD5E1' } }
+                };
+            });
+            headerRow.height = 24;
+
+            // 期間内の打刻レコードからポイントを集計
+            const filteredPeriodRecords = records.filter(r => r.date >= period.startDateStr && r.date <= period.endDateStr);
+
+            let currentRowIdx = 7;
+            let totalPeriodEarned = 0;
+            let totalPeriodGifted = 0;
+
+            staffs.forEach(st => {
+                // 期間内にこのスタッフが獲得したポイント
+                const earned = filteredPeriodRecords
+                    .filter(r => (r.staffId === st.id || r.staffName === st.name) && r.points)
+                    .reduce((sum, r) => sum + (Number(r.points) || 0), 0);
+
+                // 期間内にこのスタッフが他者へ贈ったポイント
+                const gifted = filteredPeriodRecords
+                    .filter(r => (r.staffId === st.id || r.staffName === st.name) && r.peerPoints)
+                    .reduce((sum, r) => sum + (Number(r.peerPoints) || 0), 0);
+
+                const ledger = pointLedger[st.id] || { current: 0, lifetime: 0 };
+
+                totalPeriodEarned += earned;
+                totalPeriodGifted += gifted;
+
+                const row = ptSheet.getRow(currentRowIdx);
+                row.getCell(2).value = st.name;
+                row.getCell(3).value = earned;
+                row.getCell(4).value = gifted;
+                row.getCell(5).value = ledger.current;
+                row.getCell(6).value = ledger.lifetime;
+
+                // スタイル
+                for (let c = 2; c <= 6; c++) {
+                    const cell = row.getCell(c);
+                    cell.font = { name: 'Meiryo', size: 10 };
+                    cell.alignment = { vertical: 'middle', horizontal: c === 2 ? 'left' : 'right' };
+                    cell.border = {
+                        top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+                        left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+                        bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+                        right: { style: 'thin', color: { argb: 'FFE2E8F0' } }
+                    };
+                    if (currentRowIdx % 2 === 0) {
+                        cell.fill = {
+                            type: 'pattern',
+                            pattern: 'solid',
+                            fgColor: { argb: 'FFF8FAFC' }
+                        };
+                    }
+                }
+                row.height = 20;
+                currentRowIdx++;
+            });
+
+            // 合計行
+            const sumRow = ptSheet.getRow(currentRowIdx);
+            sumRow.getCell(2).value = '合計';
+            sumRow.getCell(3).value = totalPeriodEarned;
+            sumRow.getCell(4).value = totalPeriodGifted;
+            sumRow.getCell(5).value = '-';
+            sumRow.getCell(6).value = '-';
+            for (let c = 2; c <= 6; c++) {
+                const cell = sumRow.getCell(c);
+                cell.font = { name: 'Meiryo', size: 10, bold: true };
+                cell.alignment = { vertical: 'middle', horizontal: c === 2 ? 'left' : 'right' };
+                cell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FFE0F2FE' }
+                };
+                cell.border = {
+                    top: { style: 'medium', color: { argb: 'FF0284C7' } },
+                    bottom: { style: 'double', color: { argb: 'FF0284C7' } },
+                    left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+                    right: { style: 'thin', color: { argb: 'FFE2E8F0' } }
+                };
+            }
+            sumRow.height = 22;
+            currentRowIdx += 3;
+
+            // セクション2: 感謝メッセージ・ギフト履歴
+            ptSheet.getCell(`B${currentRowIdx}`).value = '【感謝メッセージ＆ギフト履歴】';
+            ptSheet.getCell(`B${currentRowIdx}`).font = { name: 'Meiryo', size: 12, bold: true, color: { argb: 'FF1E293B' } };
+            currentRowIdx++;
+
+            const logHeaders = ['日付', '感謝を贈った人', '受け取った人', '贈呈ポイント', '感謝・評価メッセージ'];
+            const logHeaderRow = ptSheet.getRow(currentRowIdx);
+            logHeaders.forEach((h, i) => {
+                const cell = logHeaderRow.getCell(i + 2);
+                cell.value = h;
+                cell.font = { name: 'Meiryo', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+                cell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FFD97706' } // Amber / warm gold
+                };
+                cell.alignment = { vertical: 'middle', horizontal: i === 3 ? 'right' : 'left' };
+                cell.border = {
+                    top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+                    left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+                    bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+                    right: { style: 'thin', color: { argb: 'FFCBD5E1' } }
+                };
+            });
+            logHeaderRow.height = 24;
+            currentRowIdx++;
+
+            // 期間内のギフトログ
+            const periodLogs = pointLogs.filter(l => l.date >= period.startDateStr && l.date <= period.endDateStr);
+            if (periodLogs.length === 0) {
+                const emptyRow = ptSheet.getRow(currentRowIdx);
+                ptSheet.mergeCells(`B${currentRowIdx}:F${currentRowIdx}`);
+                const emptyCell = emptyRow.getCell(2);
+                emptyCell.value = '※この期間内の感謝ギフト履歴はありません。';
+                emptyCell.font = { name: 'Meiryo', size: 10, italic: true, color: { argb: 'FF94A3B8' } };
+                emptyCell.alignment = { vertical: 'middle', horizontal: 'center' };
+                emptyRow.height = 24;
+            } else {
+                periodLogs.forEach(l => {
+                    const row = ptSheet.getRow(currentRowIdx);
+                    row.getCell(2).value = l.date;
+                    row.getCell(3).value = l.giverName || '-';
+                    row.getCell(4).value = l.receiverName || '-';
+                    row.getCell(5).value = `${l.points} pt`;
+                    row.getCell(6).value = l.message || '(メッセージなし)';
+
+                    for (let c = 2; c <= 6; c++) {
+                        const cell = row.getCell(c);
+                        cell.font = { name: 'Meiryo', size: 10 };
+                        cell.alignment = { vertical: 'middle', horizontal: c === 5 ? 'right' : 'left' };
+                        cell.border = {
+                            top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+                            left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+                            bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+                            right: { style: 'thin', color: { argb: 'FFE2E8F0' } }
+                        };
+                    }
+                    row.height = 20;
+                    currentRowIdx++;
+                });
+            }
+
+            // 6. Excelファイルをバッファに書き出してダウンロード
+            const outBuffer = await workbook.xlsx.writeBuffer();
+            const blob = new Blob([outBuffer], {
+                type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            });
+            const url = URL.createObjectURL(blob);
+            const downloadLink = document.createElement('a');
+            downloadLink.href = url;
+            downloadLink.download = `時間集計表_${targetYear}年${targetMonth}月度.xlsx`;
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+            URL.revokeObjectURL(url);
+
+            elements.modalExcelExport.classList.remove('active');
+            showToast(`時間集計表 (${targetYear}年${targetMonth}月度) をダウンロードしました！`, 'success');
+        } catch (err) {
+            console.error('Excel Export Error:', err);
+            showToast('Excel生成中にエラーが発生しました: ' + err.message, 'warning');
+        } finally {
+            btnSubmit.disabled = false;
+            btnSubmit.innerHTML = originalBtnHTML;
+            if (window.lucide) window.lucide.createIcons();
+        }
+    });
+
+    // ==========================================================================
+    // Staff Correction Request & Admin Approval Flow
+    // ==========================================================================
+
+    // Update Pending Badge in Admin Sidebar
+    function updatePendingBadge() {
+        const pendingCount = correctionRequests.filter(r => r.status === 'pending').length;
+        if (elements.badgePendingRequests) {
+            if (pendingCount > 0) {
+                elements.badgePendingRequests.textContent = pendingCount;
+                elements.badgePendingRequests.classList.remove('hidden');
+            } else {
+                elements.badgePendingRequests.classList.add('hidden');
+            }
+        }
+        if (elements.pendingCountText) {
+            elements.pendingCountText.textContent = `未承認 ${pendingCount}件`;
+        }
+    }
+    // Initial call
+    updatePendingBadge();
+
+    // Staff: Open Correction Request Modal
+    if (elements.btnOpenCorrectionModal) {
+        elements.btnOpenCorrectionModal.addEventListener('click', () => {
+            if (!selectedStaffId) {
+                showToast('スタッフを選択してから申請ボタンを押してください。', 'warning');
+                return;
+            }
+            const staff = staffs.find(s => s.id === selectedStaffId);
+            if (!staff) return;
+
+            elements.correctionStaffName.textContent = staff.name;
+            
+            // Default date to today
+            const now = new Date();
+            const y = now.getFullYear();
+            const m = String(now.getMonth() + 1).padStart(2, '0');
+            const d = String(now.getDate()).padStart(2, '0');
+            elements.correctionDate.value = `${y}-${m}-${d}`;
+            
+            // Prefill with today's record if available
+            const todayRec = getTodayRecord(staff.id);
+            elements.correctionCheckin.value = todayRec && todayRec.checkin ? todayRec.checkin.substring(0, 5) : '';
+            elements.correctionCheckout.value = todayRec && todayRec.checkout ? todayRec.checkout.substring(0, 5) : '';
+            elements.correctionReasonSelect.value = '';
+            elements.correctionReasonDetail.value = '';
+            elements.correctionReasonDetail.classList.add('hidden');
+
+            elements.modalCorrectionRequest.classList.add('active');
+            if (window.lucide) window.lucide.createIcons();
+        });
+    }
+
+    if (elements.btnCloseCorrectionModal) {
+        elements.btnCloseCorrectionModal.addEventListener('click', () => {
+            elements.modalCorrectionRequest.classList.remove('active');
+        });
+    }
+
+    // Toggle reason detail input
+    if (elements.correctionReasonSelect) {
+        elements.correctionReasonSelect.addEventListener('change', () => {
+            if (elements.correctionReasonSelect.value === 'その他') {
+                elements.correctionReasonDetail.classList.remove('hidden');
+                elements.correctionReasonDetail.required = true;
+                elements.correctionReasonDetail.focus();
+            } else {
+                elements.correctionReasonDetail.classList.add('hidden');
+                elements.correctionReasonDetail.required = false;
+            }
+        });
+    }
+
+    // Submit Correction Request
+    if (elements.formCorrectionRequest) {
+        elements.formCorrectionRequest.addEventListener('submit', (e) => {
+            e.preventDefault();
+            if (!selectedStaffId) return;
+            const staff = staffs.find(s => s.id === selectedStaffId);
+            if (!staff) return;
+
+            const targetDate = elements.correctionDate.value;
+            const checkinVal = elements.correctionCheckin.value || null;
+            const checkoutVal = elements.correctionCheckout.value || null;
+
+            if (!checkinVal && !checkoutVal) {
+                showToast('出勤時刻または退勤時刻のいずれかを入力してください。', 'warning');
+                return;
+            }
+
+            let reasonVal = elements.correctionReasonSelect.value;
+            if (reasonVal === 'その他') {
+                const detail = elements.correctionReasonDetail.value.trim();
+                if (!detail) {
+                    showToast('詳細な理由を入力してください。', 'warning');
+                    return;
+                }
+                reasonVal = `その他: ${detail}`;
+            }
+
+            const newReq = {
+                id: `req-${Date.now()}`,
+                staffId: staff.id,
+                staffName: staff.name,
+                date: targetDate,
+                checkin: checkinVal,
+                checkout: checkoutVal,
+                reason: reasonVal,
+                status: 'pending',
+                createdAt: new Date().toISOString(),
+                processedAt: null
+            };
+
+            correctionRequests.unshift(newReq);
+            saveState();
+            updatePendingBadge();
+            syncWithGoogleSheets(true);
+
+            elements.modalCorrectionRequest.classList.remove('active');
+            showToast('管理者に打刻修正申請を送信しました。承認をお待ちください。', 'success');
+        });
+    }
+
+    // Admin: Render Requests Tables (Pending & Processed)
+    function renderRequestsTables() {
+        updatePendingBadge();
+
+        const pendingList = correctionRequests.filter(r => r.status === 'pending');
+        const processedList = correctionRequests.filter(r => r.status !== 'pending');
+
+        // Render Pending Requests
+        elements.pendingRequestsTableBody.innerHTML = '';
+        if (pendingList.length === 0) {
+            elements.pendingRequestsTableBody.innerHTML = `
+                <tr>
+                    <td colspan="7" class="text-center" style="color: var(--text-muted); padding: 2rem;">
+                        現在、未承認の修正依頼はありません。
+                    </td>
+                </tr>
+            `;
+        } else {
+            pendingList.forEach(req => {
+                const tr = document.createElement('tr');
+                const createdTime = req.createdAt ? req.createdAt.replace('T', ' ').substring(0, 16) : '-';
+                const timeDiff = `${req.checkin || '-'} 〜 ${req.checkout || '-'}`;
+                
+                tr.innerHTML = `
+                    <td style="font-size:0.85rem; color:var(--text-muted);">${createdTime}</td>
+                    <td style="font-weight:700;">${escapeHTML(req.staffName)}</td>
+                    <td style="font-weight:600; color:var(--primary-dark);">${req.date}</td>
+                    <td><span class="status-badge" style="background:#e0f2fe; color:#0369a1;">修正申請</span></td>
+                    <td style="font-weight:600;"><span class="time-val">${timeDiff}</span></td>
+                    <td style="font-size:0.85rem; color:#475569;">${escapeHTML(req.reason)}</td>
+                    <td>
+                        <div style="display:flex; gap:0.4rem;">
+                            <button class="btn-approve btn-approve-request" data-id="${req.id}" title="承認して打刻データに反映">
+                                <i data-lucide="check" style="width:14px;height:14px;"></i> 承認
+                            </button>
+                            <button class="btn-reject btn-reject-request" data-id="${req.id}" title="申請を却下">
+                                <i data-lucide="x" style="width:14px;height:14px;"></i> 却下
+                            </button>
+                        </div>
+                    </td>
+                `;
+                elements.pendingRequestsTableBody.appendChild(tr);
+            });
+        }
+
+        // Render Processed Requests
+        elements.processedRequestsTableBody.innerHTML = '';
+        if (processedList.length === 0) {
+            elements.processedRequestsTableBody.innerHTML = `
+                <tr>
+                    <td colspan="6" class="text-center" style="color: var(--text-muted); padding: 1.5rem;">
+                        過去の処理履歴はありません。
+                    </td>
+                </tr>
+            `;
+        } else {
+            processedList.slice(0, 30).forEach(req => {
+                const tr = document.createElement('tr');
+                const processedTime = req.processedAt ? req.processedAt.replace('T', ' ').substring(0, 16) : '-';
+                const timeDiff = `${req.checkin || '-'} 〜 ${req.checkout || '-'}`;
+                const resultBadge = req.status === 'approved' 
+                    ? `<span class="status-badge status-online">承認済み</span>`
+                    : `<span class="status-badge status-offline" style="background:#fee2e2; color:#b91c1c;">却下</span>`;
+
+                tr.innerHTML = `
+                    <td style="font-size:0.85rem; color:var(--text-muted);">${processedTime}</td>
+                    <td style="font-weight:600;">${escapeHTML(req.staffName)}</td>
+                    <td>${req.date}</td>
+                    <td><span class="time-val">${timeDiff}</span></td>
+                    <td style="font-size:0.85rem; color:#475569;">${escapeHTML(req.reason)}</td>
+                    <td>${resultBadge}</td>
+                `;
+                elements.processedRequestsTableBody.appendChild(tr);
+            });
+        }
+
+        if (window.lucide) window.lucide.createIcons();
+
+        // Bind Action Buttons
+        document.querySelectorAll('.btn-approve-request').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const reqId = e.currentTarget.dataset.id;
+                approveCorrectionRequest(reqId);
+            });
+        });
+
+        document.querySelectorAll('.btn-reject-request').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const reqId = e.currentTarget.dataset.id;
+                rejectCorrectionRequest(reqId);
+            });
+        });
+    }
+
+    // Approve Logic: Updates records directly!
+    function approveCorrectionRequest(reqId) {
+        const req = correctionRequests.find(r => r.id === reqId);
+        if (!req) return;
+
+        // Find existing record or create new one
+        let rec = records.find(r => (r.staffId === req.staffId || r.staffName === req.staffName) && r.date === req.date);
+        
+        if (rec) {
+            if (req.checkin) rec.checkin = req.checkin.length === 5 ? req.checkin + ':00' : req.checkin;
+            if (req.checkout) rec.checkout = req.checkout.length === 5 ? req.checkout + ':00' : req.checkout;
+            rec.isCorrected = true;
+            rec.correctionReason = req.reason;
+
+            // Recalculate duration
+            if (rec.checkin && rec.checkout) {
+                const parsedIn = parseTimeToDate(rec.date, rec.checkin);
+                const parsedOut = parseTimeToDate(rec.date, rec.checkout);
+                let durMs = parsedOut - parsedIn;
+                if (durMs < 0) durMs = 0;
+                rec.duration = Math.floor(durMs / (1000 * 60));
+            }
+        } else {
+            // Create new record for missed day
+            const inTime = req.checkin ? (req.checkin.length === 5 ? req.checkin + ':00' : req.checkin) : '09:00:00';
+            const outTime = req.checkout ? (req.checkout.length === 5 ? req.checkout + ':00' : req.checkout) : null;
+            let workDur = 0;
+            if (inTime && outTime) {
+                const parsedIn = parseTimeToDate(req.date, inTime);
+                const parsedOut = parseTimeToDate(req.date, outTime);
+                const durMs = parsedOut - parsedIn;
+                if (durMs > 0) workDur = Math.floor(durMs / (1000 * 60));
+            }
+
+            rec = {
+                id: `rec-${Date.now()}`,
+                date: req.date,
+                staffId: req.staffId,
+                staffName: req.staffName,
+                checkin: inTime,
+                breakStart: null,
+                breakEnd: null,
+                checkout: outTime,
+                duration: workDur,
+                points: workDur >= 360 ? 3 : (workDur >= 180 ? 2 : 0),
+                peerReceiverId: null,
+                peerReceiverName: null,
+                peerPoints: 0,
+                overtimeReason: null,
+                isCorrected: true,
+                correctionReason: req.reason
+            };
+            records.unshift(rec);
+        }
+
+        req.status = 'approved';
+        req.processedAt = new Date().toISOString();
+
+        saveState();
+        renderRequestsTables();
+        renderRecordsTable();
+        syncWithGoogleSheets(true);
+        showToast(`${req.staffName}さんの打刻修正を承認し、打刻履歴に反映しました！`, 'success');
+    }
+
+    // Reject Logic
+    function rejectCorrectionRequest(reqId) {
+        const req = correctionRequests.find(r => r.id === reqId);
+        if (!req) return;
+
+        req.status = 'rejected';
+        req.processedAt = new Date().toISOString();
+
+        saveState();
+        renderRequestsTables();
+        syncWithGoogleSheets(true);
+        showToast(`${req.staffName}さんの修正申請を却下しました。`, 'warning');
+    }
 
     // ==========================================================================
     // Admin Module: Staff Management
@@ -1010,13 +2029,28 @@ document.addEventListener('DOMContentLoaded', () => {
         showToast(`${staff.name}さんのポイントを調整しました。(${amount}pt)`, 'success');
     });
 
-    // Save GAS Settings
-    elements.btnSaveGas.addEventListener('click', () => {
-        const url = elements.gasUrlInput.value.trim();
-        settings.gasUrl = url;
-        saveState();
-        showToast('Googleスプレッドシート連携URLを保存しました。', 'success');
-    });
+    // Save GAS Settings & Sync Now
+    if (elements.btnSaveGas) {
+        elements.btnSaveGas.addEventListener('click', () => {
+            const url = elements.gasUrlInput.value.trim();
+            settings.gasUrl = url;
+            saveState();
+            showToast('Googleスプレッドシート連携URLを保存しました。同期をテストします...', 'success');
+            syncWithGoogleSheets(false);
+        });
+    }
+
+    if (elements.btnSyncNow) {
+        elements.btnSyncNow.addEventListener('click', () => {
+            syncWithGoogleSheets(false);
+        });
+    }
+
+    if (elements.cloudSyncPill) {
+        elements.cloudSyncPill.addEventListener('click', () => {
+            syncWithGoogleSheets(false);
+        });
+    }
  
     function renderPointsView() {
         // Show current GAS URL
@@ -1089,4 +2123,11 @@ document.addEventListener('DOMContentLoaded', () => {
     renderStaffGrid();
     lucide.createIcons();
     elements.btnClosePanel.addEventListener('click', closeControlPanel);
+
+    // Initial Cloud Sync
+    if (settings.gasUrl) {
+        syncWithGoogleSheets(true);
+    } else {
+        setSyncStatus('idle', 'クラウド未連携');
+    }
 });
