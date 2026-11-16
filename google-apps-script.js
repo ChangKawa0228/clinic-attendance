@@ -1,7 +1,14 @@
 function doGet(e) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var allData = loadAllData(ss);
-  return ContentService.createTextOutput(JSON.stringify({ success: true, data: allData }))
+  var callback = (e && e.parameter && e.parameter.callback) ? e.parameter.callback : null;
+  var json = JSON.stringify({ success: true, data: allData });
+  
+  if (callback) {
+    return ContentService.createTextOutput(callback + '(' + json + ');')
+      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+  }
+  return ContentService.createTextOutput(json)
     .setMimeType(ContentService.MimeType.JSON);
 }
 

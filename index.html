@@ -431,12 +431,12 @@
 
     <!-- Peer Point Gift Modal -->
     <div id="modal-peer-gift" class="modal">
-        <div class="modal-content">
+        <div class="modal-content" style="max-width: 520px;">
             <div class="modal-header">
                 <i data-lucide="gift" class="lock-icon" style="background: var(--warning-light); color: var(--warning); margin: 0 auto 1rem auto; display: block; width: 3rem; height: 3rem; border-radius: 50%; padding: 0.6rem;"></i>
                 <h3>お疲れ様でした！</h3>
                 <p id="peer-gift-message" style="font-weight: 600; font-size: 1.1rem; color: var(--primary-dark); margin: 0.5rem 0;">本日の勤務で 0 ポイント獲得しました。</p>
-                <p class="field-desc">獲得したポイントを他のスタッフに贈りましょう！</p>
+                <p class="field-desc">獲得した感謝ポイントを同僚スタッフに割り振って贈りましょう！</p>
             </div>
             <form id="form-peer-gift" class="modal-form">
                 <!-- 残業理由入力フィールド (残業時のみ表示) -->
@@ -459,23 +459,49 @@
                     <input type="text" id="overtime-reason-detail" class="form-control hidden" placeholder="具体的な理由を入力してください">
                 </div>
 
-                <div class="form-group">
-                    <label for="select-gift-receiver">贈る相手</label>
-                    <select id="select-gift-receiver" class="form-control" required>
-                        <option value="">スタッフを選択...</option>
-                    </select>
+                <!-- ポイント割り振りセクション (ポイント獲得時のみ表示) -->
+                <div id="point-allocation-section" class="form-group">
+                    <div style="display: flex; justify-content: space-between; align-items: center; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: var(--radius-sm); padding: 0.75rem 1rem; margin-bottom: 0.75rem;">
+                        <span style="font-weight: 600; color: #1e40af; font-size: 0.9rem;">
+                            獲得: <strong id="alloc-total-display" style="font-size: 1.1rem; color: #1d4ed8;">0</strong> pt
+                        </span>
+                        <span style="font-weight: 700; color: #047857; font-size: 0.95rem;">
+                            残り割り振り可能: <strong id="alloc-remaining-display" style="font-size: 1.2rem; color: #059669;">0</strong> pt
+                        </span>
+                    </div>
+
+                    <label style="font-weight: 600; margin-bottom: 0.4rem; display: flex; justify-content: space-between; align-items: center;">
+                        <span>スタッフごとにポイントを配分</span>
+                        <button type="button" id="btn-quick-alloc-one" style="background: none; border: none; color: var(--primary); font-size: 0.8rem; cursor: pointer; text-decoration: underline;">
+                            1人にまとめて贈る...
+                        </button>
+                    </label>
+
+                    <!-- クイック一括選択（アコーディオン） -->
+                    <div id="quick-alloc-box" class="hidden" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: var(--radius-sm); padding: 0.6rem; margin-bottom: 0.6rem; display: flex; gap: 0.5rem;">
+                        <select id="quick-alloc-select" class="form-control" style="font-size: 0.85rem; padding: 0.4rem;">
+                            <option value="">贈るスタッフを選択...</option>
+                        </select>
+                        <button type="button" id="btn-apply-quick-alloc" class="btn btn-secondary" style="font-size: 0.85rem; padding: 0.4rem 0.8rem; white-space: nowrap;">
+                            全額配分
+                        </button>
+                    </div>
+
+                    <!-- スタッフ割り振りリスト -->
+                    <div id="alloc-staff-list" class="alloc-list-container" style="max-height: 220px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 0.4rem; background: white; margin-bottom: 0.75rem;">
+                        <!-- JSで動的にスタッフ一覧と +/- コントロールを描画 -->
+                    </div>
                 </div>
+
                 <div class="form-group">
-                    <label for="select-gift-amount">贈るポイント数</label>
-                    <select id="select-gift-amount" class="form-control" required>
-                        <!-- Dynamic options -->
-                    </select>
+                    <label for="gift-message">感謝・評価のメッセージ (任意)</label>
+                    <input type="text" id="gift-message" class="form-control" placeholder="例: 今日はフォローありがとうございました！">
                 </div>
-                <div class="form-group">
-                    <label for="gift-message">感謝・評価のメッセージ</label>
-                    <input type="text" id="gift-message" class="form-control" placeholder="例: 今日はサポートありがとう！">
+                
+                <div style="display: flex; gap: 0.75rem; margin-top: 1rem;">
+                    <button type="button" id="btn-skip-gift" class="btn btn-secondary" style="flex: 1;">スキップ (贈らない)</button>
+                    <button type="submit" id="btn-submit-gift" class="btn btn-primary" style="flex: 2;">ポイントを贈って退勤</button>
                 </div>
-                <button type="submit" class="btn btn-primary btn-full">ポイントを贈って退勤する</button>
             </form>
         </div>
     </div>

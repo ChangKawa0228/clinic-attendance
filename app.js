@@ -195,13 +195,21 @@ document.addEventListener('DOMContentLoaded', () => {
         adminPassword: document.getElementById('admin-password'),
         authError: document.getElementById('auth-error'),
         
-        // Peer Gift Modal
+        // Peer Gift Modal (Allocation)
         modalPeerGift: document.getElementById('modal-peer-gift'),
         peerGiftMessage: document.getElementById('peer-gift-message'),
         formPeerGift: document.getElementById('form-peer-gift'),
-        selectGiftReceiver: document.getElementById('select-gift-receiver'),
-        selectGiftAmount: document.getElementById('select-gift-amount'),
+        pointAllocationSection: document.getElementById('point-allocation-section'),
+        allocTotalDisplay: document.getElementById('alloc-total-display'),
+        allocRemainingDisplay: document.getElementById('alloc-remaining-display'),
+        allocStaffList: document.getElementById('alloc-staff-list'),
+        btnQuickAllocOne: document.getElementById('btn-quick-alloc-one'),
+        quickAllocBox: document.getElementById('quick-alloc-box'),
+        quickAllocSelect: document.getElementById('quick-alloc-select'),
+        btnApplyQuickAlloc: document.getElementById('btn-apply-quick-alloc'),
         giftMessage: document.getElementById('gift-message'),
+        btnSkipGift: document.getElementById('btn-skip-gift'),
+        btnSubmitGift: document.getElementById('btn-submit-gift'),
         overtimeReasonSection: document.getElementById('overtime-reason-section'),
         selectOvertimeReason: document.getElementById('select-overtime-reason'),
         overtimeReasonDetail: document.getElementById('overtime-reason-detail'),
@@ -372,6 +380,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function selectStaff(staffId) {
         selectedStaffId = staffId;
         
+        // 本日の最新レコードからステータスを即時整合
+        reconcileStaffStatusFromRecords();
+
         // Highlight in grid
         document.querySelectorAll('.staff-card').forEach(card => {
             card.classList.toggle('active-selection', card.dataset.id === staffId);
@@ -454,8 +465,14 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.summaryCheckout.textContent = record?.checkout || '-';
     }
 
+    function getTodayString() {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+
     function getTodayRecord(staffId) {
-        return records.find(r => r.staffId === staffId && r.date === todayStr);
+        const today = getTodayString();
+        return records.find(r => r.staffId === staffId && r.date === today);
     }
 
     // 1. 出勤 (Check-in)
@@ -476,7 +493,7 @@ document.addEventListener('DOMContentLoaded', () => {
             id: `rec-${Date.now()}`,
             staffId: staff.id,
             staffName: staff.name,
-            date: todayStr,
+            date: getTodayString(),
             checkin: timeStr,
             breakStart: null,
             breakEnd: null,
@@ -617,37 +634,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 elements.selectOvertimeReason.value = '';
             }
 
-            // Populate peer gift modal fields
+            // Populate peer gift allocation
             if (pointsEarned > 0) {
-                elements.peerGiftMessage.textContent = `本日の勤務で ${pointsEarned} ポイント獲得しました。`;
-                elements.selectGiftReceiver.parentElement.classList.remove('hidden');
-                elements.selectGiftAmount.parentElement.classList.remove('hidden');
-                elements.giftMessage.parentElement.classList.remove('hidden');
-                
-                // Populate receivers (excluding self)
-                elements.selectGiftReceiver.innerHTML = '<option value="">スタッフを選択...</option>';
-                staffs.filter(s => s.id !== staff.id).forEach(s => {
-                    const opt = document.createElement('option');
-                    opt.value = s.id;
-                    opt.textContent = s.name;
-                    elements.selectGiftReceiver.appendChild(opt);
-                });
-
-                // Populate points select (0 to pointsEarned)
-                elements.selectGiftAmount.innerHTML = '';
-                for (let i = pointsEarned; i >= 0; i--) {
-                    const opt = document.createElement('option');
-                    opt.value = i;
-                    opt.textContent = `${i} pt`;
-                    elements.selectGiftAmount.appendChild(opt);
-                }
-                elements.selectGiftReceiver.required = true;
+                elements.peerGiftMessage.textContent = `本日の勤務で ${pointsEarned} ポイント獲得しました！`;
+                elements.pointAllocationSection.classList.remove('hidden');
+                elements.btnSubmitGift.textContent = 'ポイントを配分して退勤';
+                renderAllocationList(staff.id, pointsEarned);
             } else {
                 elements.peerGiftMessage.textContent = `本日の勤務時間: ${(workMinutes / 60).toFixed(1)} 時間`;
-                elements.selectGiftReceiver.parentElement.classList.add('hidden');
-                elements.selectGiftAmount.parentElement.classList.add('hidden');
-                elements.giftMessage.parentElement.classList.add('hidden');
-                elements.selectGiftReceiver.required = false;
+                elements.pointAllocationSection.classList.add('hidden');
+                elements.btnSubmitGift.textContent = '退勤を記録する';
             }
 
             // Show modal
@@ -658,7 +654,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             // Instant checkout with no points and no overtime
             saveState();
-            renderStaffGrid();
+            reconcileStaffStatusFromRecords();
             closeControlPanel();
             syncWithGoogleSheets(true);
             showToast(`${staff.name}さん、お疲れ様でした。退勤を記録しました。(勤務時間: ${(workMinutes/60).toFixed(1)}時間)`, 'success');
@@ -677,21 +673,136 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Watch gift points select to dynamically toggle receiver input requirement
-    elements.selectGiftAmount.addEventListener('change', () => {
-        const amt = parseInt(elements.selectGiftAmount.value, 10);
-        elements.selectGiftReceiver.required = (amt > 0);
+    // ==========================================================================
+    // Peer Gift Allocation Logic
+    // ==========================================================================
+    let currentAllocations = {};
+    let totalAllocPoints = 0;
+
+    function renderAllocationList(selfStaffId, maxPoints) {
+        totalAllocPoints = maxPoints;
+        currentAllocations = {};
+
+        elements.allocTotalDisplay.textContent = maxPoints;
+        elements.allocRemainingDisplay.textContent = maxPoints;
+        elements.quickAllocBox.classList.add('hidden');
+
+        elements.quickAllocSelect.innerHTML = '<option value="">スタッフを選択...</option>';
+        elements.allocStaffList.innerHTML = '';
+
+        const peers = staffs.filter(s => s.id !== selfStaffId);
+        peers.forEach(peer => {
+            currentAllocations[peer.id] = 0;
+
+            const opt = document.createElement('option');
+            opt.value = peer.id;
+            opt.textContent = peer.name;
+            elements.quickAllocSelect.appendChild(opt);
+
+            const row = document.createElement('div');
+            row.className = 'alloc-staff-row';
+            row.id = `alloc-row-${peer.id}`;
+            const initial = peer.name ? peer.name.trim().charAt(0) : '?';
+            const color = peer.avatarColor || 'var(--primary)';
+
+            row.innerHTML = `
+                <div class="alloc-staff-info">
+                    <div class="alloc-mini-avatar" style="background: ${color};">${escapeHTML(initial)}</div>
+                    <span>${escapeHTML(peer.name)}</span>
+                </div>
+                <div class="alloc-counter">
+                    <button type="button" class="btn-alloc-step" data-action="dec" data-id="${peer.id}" disabled>-</button>
+                    <span class="alloc-val-display" id="alloc-val-${peer.id}">0 pt</span>
+                    <button type="button" class="btn-alloc-step" data-action="inc" data-id="${peer.id}">+</button>
+                </div>
+            `;
+            elements.allocStaffList.appendChild(row);
+        });
+
+        updateAllocUI();
+    }
+
+    function updateAllocUI() {
+        const allocatedSum = Object.values(currentAllocations).reduce((a, b) => a + b, 0);
+        const remaining = totalAllocPoints - allocatedSum;
+        elements.allocRemainingDisplay.textContent = remaining;
+
+        for (const stId in currentAllocations) {
+            const count = currentAllocations[stId];
+            const row = document.getElementById(`alloc-row-${stId}`);
+            const valDisplay = document.getElementById(`alloc-val-${stId}`);
+            const btnDec = row?.querySelector('[data-action="dec"]');
+            const btnInc = row?.querySelector('[data-action="inc"]');
+
+            if (valDisplay) valDisplay.textContent = `${count} pt`;
+            if (row) {
+                if (count > 0) row.classList.add('has-points');
+                else row.classList.remove('has-points');
+            }
+            if (btnDec) btnDec.disabled = (count <= 0);
+            if (btnInc) btnInc.disabled = (remaining <= 0);
+        }
+    }
+
+    // Step +/- click handler
+    elements.allocStaffList.addEventListener('click', (e) => {
+        const btn = e.target.closest('.btn-alloc-step');
+        if (!btn) return;
+        const action = btn.dataset.action;
+        const id = btn.dataset.id;
+        if (!id || currentAllocations[id] === undefined) return;
+
+        const allocatedSum = Object.values(currentAllocations).reduce((a, b) => a + b, 0);
+        const remaining = totalAllocPoints - allocatedSum;
+
+        if (action === 'inc' && remaining > 0) {
+            currentAllocations[id]++;
+            updateAllocUI();
+        } else if (action === 'dec' && currentAllocations[id] > 0) {
+            currentAllocations[id]--;
+            updateAllocUI();
+        }
     });
+
+    // Quick full allocation
+    if (elements.btnQuickAllocOne) {
+        elements.btnQuickAllocOne.addEventListener('click', () => {
+            elements.quickAllocBox.classList.toggle('hidden');
+        });
+    }
+
+    if (elements.btnApplyQuickAlloc) {
+        elements.btnApplyQuickAlloc.addEventListener('click', () => {
+            const chosenId = elements.quickAllocSelect.value;
+            if (!chosenId) return;
+            for (const id in currentAllocations) {
+                currentAllocations[id] = (id === chosenId) ? totalAllocPoints : 0;
+            }
+            updateAllocUI();
+        });
+    }
+
+    // Skip peer gift
+    if (elements.btnSkipGift) {
+        elements.btnSkipGift.addEventListener('click', () => {
+            for (const id in currentAllocations) {
+                currentAllocations[id] = 0;
+            }
+            executeCheckoutFinish();
+        });
+    }
 
     // Handle peer gift submit
     elements.formPeerGift.addEventListener('submit', (e) => {
         e.preventDefault();
+        executeCheckoutFinish();
+    });
+
+    function executeCheckoutFinish() {
         if (!pendingCheckout) return;
 
         const { staff, record, pointsEarned, isOvertime } = pendingCheckout;
-        const receiverId = elements.selectGiftReceiver.value;
-        const giftPoints = parseInt(elements.selectGiftAmount.value, 10) || 0;
-        const msg = elements.giftMessage.value.trim();
+        const msg = elements.giftMessage ? elements.giftMessage.value.trim() : '';
 
         // Overtime reason handling
         if (isOvertime) {
@@ -711,59 +822,72 @@ document.addEventListener('DOMContentLoaded', () => {
             record.overtimeReason = reasonVal;
         }
 
-        if (giftPoints > 0) {
-            if (!receiverId) {
-                showToast('贈る相手を選択してください。', 'warning');
-                return;
+        // Process point allocations
+        const allocatedPeers = [];
+        let totalGiftPoints = 0;
+
+        for (const receiverId in currentAllocations) {
+            const pts = currentAllocations[receiverId];
+            if (pts > 0) {
+                const receiver = staffs.find(s => s.id === receiverId);
+                if (receiver) {
+                    totalGiftPoints += pts;
+                    allocatedPeers.push(`${receiver.name}(${pts}pt)`);
+
+                    if (!pointLedger[receiver.id]) {
+                        pointLedger[receiver.id] = { current: 0, lifetime: 0 };
+                    }
+                    pointLedger[receiver.id].current += pts;
+                    pointLedger[receiver.id].lifetime += pts;
+
+                    pointLogs.unshift({
+                        id: `pt-${Date.now()}-${receiver.id}`,
+                        timestamp: new Date().toISOString(),
+                        staffId: receiver.id,
+                        staffName: receiver.name,
+                        action: 'earn',
+                        points: pts,
+                        reason: `${staff.name}さんからの感謝ポイント: ${msg || '日頃のサポートに感謝！'}`
+                    });
+                }
             }
+        }
 
-            const receiver = staffs.find(s => s.id === receiverId);
-            if (!receiver) return;
-
-            // Record update
-            record.peerReceiverId = receiver.id;
-            record.peerReceiverName = receiver.name;
-            record.peerPoints = giftPoints;
-
-            // Credit points to the receiver's ledger
-            if (!pointLedger[receiver.id]) {
-                pointLedger[receiver.id] = { current: 0, lifetime: 0 };
+        // 余りポイントは自分の残高にストック
+        const leftover = pointsEarned - totalGiftPoints;
+        if (leftover > 0) {
+            if (!pointLedger[staff.id]) {
+                pointLedger[staff.id] = { current: 0, lifetime: 0 };
             }
-            pointLedger[receiver.id].current += giftPoints;
-            pointLedger[receiver.id].lifetime += giftPoints;
+            pointLedger[staff.id].current += leftover;
+            pointLedger[staff.id].lifetime += leftover;
+        }
 
-            // Create log entry for peer gift
-            pointLogs.unshift({
-                id: `pt-${Date.now()}`,
-                timestamp: new Date().toISOString(),
-                staffId: receiver.id,
-                staffName: receiver.name,
-                action: 'earn',
-                points: giftPoints,
-                reason: `${staff.name}さんからの360度評価: ${msg || '感謝のポイント'}`
-            });
+        if (totalGiftPoints > 0) {
+            record.peerReceiverName = allocatedPeers.join(', ');
+            record.peerPoints = totalGiftPoints;
+        } else {
+            record.peerReceiverName = null;
+            record.peerPoints = 0;
         }
 
         // Save state and update UI
         saveState();
-        renderStaffGrid();
+        reconcileStaffStatusFromRecords();
         syncWithGoogleSheets(true);
 
-        // Close modal and reset form fields
+        // Close modal and reset
         elements.modalPeerGift.classList.remove('active');
-        elements.selectGiftReceiver.value = '';
-        elements.selectGiftAmount.value = '';
-        elements.giftMessage.value = '';
-
-        const giftReceiverName = record.peerReceiverName;
+        if (elements.giftMessage) elements.giftMessage.value = '';
+        currentAllocations = {};
         pendingCheckout = null;
 
-        if (giftPoints > 0) {
-            showToast(`${staff.name}さんの退勤を記録し、${giftReceiverName}さんへ ${giftPoints}pt を贈りました！${record.overtimeReason ? ' (残業理由を記録済)' : ''}`, 'success');
+        if (totalGiftPoints > 0) {
+            showToast(`${staff.name}さんの退勤を記録し、${record.peerReceiverName}へ感謝ポイントを配分しました！${record.overtimeReason ? ' (残業理由を記録済)' : ''}`, 'success');
         } else {
             showToast(`${staff.name}さんの退勤を記録しました。${record.overtimeReason ? ' (残業理由を記録済)' : ''}`, 'success');
         }
-    });
+    }
 
     function parseTimeToDate(dateStr, timeStr) {
         return new Date(`${dateStr}T${timeStr}`);
@@ -894,7 +1018,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     hasChanges = true;
                 } else {
                     const localRec = localMap.get(key);
-                    if (cloudRec.isCorrected && !localRec.isCorrected) {
+                    // クラウド側のほうが更新されている場合（退勤打刻や休憩打刻、修正など）
+                    if (cloudRec.checkout && !localRec.checkout) {
+                        Object.assign(localRec, cloudRec);
+                        hasChanges = true;
+                    } else if (cloudRec.breakEnd && !localRec.breakEnd) {
+                        Object.assign(localRec, cloudRec);
+                        hasChanges = true;
+                    } else if (cloudRec.breakStart && !localRec.breakStart) {
+                        Object.assign(localRec, cloudRec);
+                        hasChanges = true;
+                    } else if (cloudRec.isCorrected && !localRec.isCorrected) {
                         Object.assign(localRec, cloudRec);
                         hasChanges = true;
                     }
@@ -939,11 +1073,130 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (hasChanges) {
             saveState();
-            renderStaffGrid();
+            reconcileStaffStatusFromRecords();
             renderRecordsTable();
             renderRequestsTables();
             updatePendingBadge();
+        } else {
+            // 変更フラグが立たなくてもステータスの整合性を確保
+            reconcileStaffStatusFromRecords();
         }
+    }
+
+    // ==========================================================================
+    // Multi-PC Status Reconciliation (打刻履歴から全スタッフの出勤状態を自動計算)
+    // ==========================================================================
+    function reconcileStaffStatusFromRecords() {
+        const now = new Date();
+        const yyyy = now.getFullYear();
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        const dd = String(now.getDate()).padStart(2, '0');
+        const today = `${yyyy}-${mm}-${dd}`;
+
+        let statusChanged = false;
+        staffs.forEach(staff => {
+            // 本日の最新打刻レコードを探す
+            const todayRecs = records.filter(r => r.staffId === staff.id && r.date === today);
+            const todayRec = todayRecs.length > 0 ? todayRecs[0] : null;
+
+            let newStatus = 'offline';
+            if (todayRec) {
+                if (todayRec.checkout) {
+                    newStatus = 'offline';
+                } else if (todayRec.breakStart && !todayRec.breakEnd) {
+                    newStatus = 'break';
+                } else if (todayRec.checkin) {
+                    newStatus = 'online';
+                }
+            }
+
+            if (staff.status !== newStatus) {
+                staff.status = newStatus;
+                statusChanged = true;
+            }
+        });
+
+        renderStaffGrid();
+
+        // 操作パネルが開いているスタッフの状態も更新
+        if (selectedStaffId) {
+            const currentStaff = staffs.find(s => s.id === selectedStaffId);
+            if (currentStaff) {
+                updateControlPanelState(currentStaff);
+            }
+        }
+
+        return statusChanged;
+    }
+
+    // ==========================================================================
+    // JSONP Cloud Data Fetcher (CORSを100%回避して全PCでスプレッドシートと双方向同期)
+    // ==========================================================================
+    function fetchCloudDataViaJsonp() {
+        if (!settings.gasUrl || isSyncing) return Promise.resolve(null);
+        isSyncing = true;
+        setSyncStatus('syncing', 'クラウド更新中...');
+
+        return new Promise((resolve) => {
+            const callbackName = 'gasCallback_' + Date.now();
+            let resolved = false;
+
+            const cleanup = () => {
+                if (resolved) return;
+                resolved = true;
+                try {
+                    delete window[callbackName];
+                } catch (e) {}
+                if (script && script.parentNode) {
+                    script.parentNode.removeChild(script);
+                }
+                isSyncing = false;
+            };
+
+            const timeoutId = setTimeout(() => {
+                cleanup();
+                setSyncStatus('synced', '接続中');
+                resolve(null);
+            }, 7000);
+
+            window[callbackName] = function(resp) {
+                clearTimeout(timeoutId);
+                cleanup();
+                if (resp && resp.success && resp.data) {
+                    mergeCloudData(resp.data);
+                    const nowTime = new Date().toTimeString().substring(0, 5);
+                    setSyncStatus('synced', `同期済 ${nowTime}`);
+                    resolve(resp.data);
+                } else {
+                    resolve(null);
+                }
+            };
+
+            const script = document.createElement('script');
+            script.onerror = function() {
+                clearTimeout(timeoutId);
+                cleanup();
+                // フォールバック: 通常fetchを試みる
+                fetch(settings.gasUrl)
+                    .then(r => r.json())
+                    .then(resp => {
+                        if (resp && resp.success && resp.data) {
+                            mergeCloudData(resp.data);
+                            const nowTime = new Date().toTimeString().substring(0, 5);
+                            setSyncStatus('synced', `同期済 ${nowTime}`);
+                        }
+                    })
+                    .catch(() => {})
+                    .finally(() => {
+                        isSyncing = false;
+                        resolve(null);
+                    });
+            };
+
+            const sep = settings.gasUrl.includes('?') ? '&' : '?';
+            script.src = `${settings.gasUrl}${sep}callback=${callbackName}&_t=${Date.now()}`;
+            document.body.appendChild(script);
+        });
     }
 
     // ==========================================================================
@@ -2042,13 +2295,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (elements.btnSyncNow) {
         elements.btnSyncNow.addEventListener('click', () => {
-            syncWithGoogleSheets(false);
+            fetchCloudDataViaJsonp().then(() => syncWithGoogleSheets(false));
         });
     }
 
     if (elements.cloudSyncPill) {
         elements.cloudSyncPill.addEventListener('click', () => {
-            syncWithGoogleSheets(false);
+            fetchCloudDataViaJsonp().then(() => syncWithGoogleSheets(false));
         });
     }
  
@@ -2118,15 +2371,29 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ==========================================================================
-    // App Initialization
+    // App Initialization & Multi-PC Synchronization Loops
     // ==========================================================================
+    reconcileStaffStatusFromRecords();
     renderStaffGrid();
     lucide.createIcons();
     elements.btnClosePanel.addEventListener('click', closeControlPanel);
 
     // Initial Cloud Sync
     if (settings.gasUrl) {
-        syncWithGoogleSheets(true);
+        // クラウドから最新データ取得 ＆ 送信
+        fetchCloudDataViaJsonp().then(() => {
+            syncWithGoogleSheets(true);
+        });
+
+        // 定期自動同期（15秒ごとに他のPCでの打刻・出退勤状態を取得して同期）
+        setInterval(() => {
+            fetchCloudDataViaJsonp();
+        }, 15000);
+
+        // 画面にフォーカスが戻った時にも即座にチェック
+        window.addEventListener('focus', () => {
+            fetchCloudDataViaJsonp();
+        });
     } else {
         setSyncStatus('idle', 'クラウド未連携');
     }

@@ -1286,3 +1286,101 @@ body {
     animation: spin 1s linear infinite;
     display: inline-block;
 }
+
+/* ==========================================================================
+   Point Allocation List Styles
+   ========================================================================== */
+.alloc-list-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.alloc-staff-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.45rem 0.65rem;
+    background: #f8fafc;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-color);
+    transition: background var(--transition-fast);
+}
+
+.alloc-staff-row:hover {
+    background: #f1f5f9;
+}
+
+.alloc-staff-row.has-points {
+    background: #ecfdf5;
+    border-color: #a7f3d0;
+}
+
+.alloc-staff-info {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-main);
+}
+
+.alloc-mini-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 0.75rem;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.alloc-counter {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.btn-alloc-step {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background: white;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-main);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    user-select: none;
+    transition: all var(--transition-fast);
+}
+
+.btn-alloc-step:hover:not(:disabled) {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+}
+
+.btn-alloc-step:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    background: #f1f5f9;
+}
+
+.alloc-val-display {
+    min-width: 38px;
+    text-align: center;
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--text-muted);
+}
+
+.alloc-staff-row.has-points .alloc-val-display {
+    color: #059669;
+}
