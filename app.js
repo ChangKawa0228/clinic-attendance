@@ -908,7 +908,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================================================
     // Cloud Sync Module (Google Apps Script - Bidirectional)
     // ==========================================================================
-    let isSyncing = false;
+    let isPushing = false;
+    let isFetching = false;
 
     function setSyncStatus(status, text) {
         if (!elements.cloudSyncPill || !elements.syncStatusText) return;
@@ -932,9 +933,9 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        if (isSyncing) return;
-        isSyncing = true;
-        setSyncStatus('syncing', '同期中...');
+        if (isPushing) return;
+        isPushing = true;
+        setSyncStatus('syncing', 'クラウド送信中...');
 
         const payload = {
             action: 'sync_all',
@@ -998,7 +999,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         } finally {
-            isSyncing = false;
+            isPushing = false;
         }
     }
 
@@ -1133,13 +1134,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // JSONP Cloud Data Fetcher (CORSを100%回避して全PCでスプレッドシートと双方向同期)
     // ==========================================================================
     function fetchCloudDataViaJsonp() {
-        if (!settings.gasUrl || isSyncing) return Promise.resolve(null);
-        isSyncing = true;
-        setSyncStatus('syncing', 'クラウド更新中...');
+        if (!settings.gasUrl || isFetching || isPushing) return Promise.resolve(null);
+        isFetching = true;
 
         return new Promise((resolve) => {
             const callbackName = 'gasCallback_' + Date.now();
             let resolved = false;
+            let scriptEl = document.createElement('script');
 
             const cleanup = () => {
                 if (resolved) return;
@@ -1147,17 +1148,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 try {
                     delete window[callbackName];
                 } catch (e) {}
-                if (script && script.parentNode) {
-                    script.parentNode.removeChild(script);
-                }
-                isSyncing = false;
+                try {
+                    if (scriptEl && scriptEl.parentNode) {
+                        scriptEl.parentNode.removeChild(scriptEl);
+                    }
+                } catch (e) {}
+                isFetching = false;
             };
 
             const timeoutId = setTimeout(() => {
                 cleanup();
-                setSyncStatus('synced', '接続中');
+                setSyncStatus('synced', '接続済');
                 resolve(null);
-            }, 7000);
+            }, 6000);
 
             window[callbackName] = function(resp) {
                 clearTimeout(timeoutId);
@@ -1168,12 +1171,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     setSyncStatus('synced', `同期済 ${nowTime}`);
                     resolve(resp.data);
                 } else {
+                    setSyncStatus('synced', '接続済');
                     resolve(null);
                 }
             };
 
-            const script = document.createElement('script');
-            script.onerror = function() {
+            scriptEl.onerror = function() {
                 clearTimeout(timeoutId);
                 cleanup();
                 // フォールバック: 通常fetchを試みる
@@ -1188,14 +1191,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     })
                     .catch(() => {})
                     .finally(() => {
-                        isSyncing = false;
+                        isFetching = false;
+                        setSyncStatus('synced', '接続済');
                         resolve(null);
                     });
             };
 
             const sep = settings.gasUrl.includes('?') ? '&' : '?';
-            script.src = `${settings.gasUrl}${sep}callback=${callbackName}&_t=${Date.now()}`;
-            document.body.appendChild(script);
+            scriptEl.src = `${settings.gasUrl}${sep}callback=${callbackName}&_t=${Date.now()}`;
+            document.body.appendChild(scriptEl);
         });
     }
 
@@ -2380,9 +2384,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initial Cloud Sync
     if (settings.gasUrl) {
-        // クラウドから最新データ取得 ＆ 送信
-        fetchCloudDataViaJsonp().then(() => {
-            syncWithGoogleSheets(true);
+        // 未送信レコードを即座にクラウドへ送信し、その後最新データを取得
+        syncWithGoogleSheets(true).then(() => {
+            fetchCloudDataViaJsonp();
         });
 
         // 定期自動同期（15秒ごとに他のPCでの打刻・出退勤状態を取得して同期）
