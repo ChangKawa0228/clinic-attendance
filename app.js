@@ -465,6 +465,40 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.summaryCheckout.textContent = record?.checkout || '-';
     }
 
+    function normalizeDateStr(dateVal) {
+        if (!dateVal) return '';
+        if (typeof dateVal === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateVal.trim())) {
+            return dateVal.trim();
+        }
+        const d = new Date(dateVal);
+        if (!isNaN(d.getTime())) {
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
+        }
+        return String(dateVal).substring(0, 10);
+    }
+
+    function normalizeTimeStr(timeVal) {
+        if (!timeVal) return null;
+        if (typeof timeVal === 'string') {
+            if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(timeVal.trim())) {
+                return timeVal.trim();
+            }
+            const match = timeVal.match(/(\d{2}:\d{2}:\d{2})/);
+            if (match) return match[1];
+        }
+        const d = new Date(timeVal);
+        if (!isNaN(d.getTime())) {
+            const h = String(d.getHours()).padStart(2, '0');
+            const min = String(d.getMinutes()).padStart(2, '0');
+            const s = String(d.getSeconds()).padStart(2, '0');
+            return `${h}:${min}:${s}`;
+        }
+        return String(timeVal);
+    }
+
     function getTodayString() {
         const d = new Date();
         return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -472,7 +506,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function getTodayRecord(staffId) {
         const today = getTodayString();
-        return records.find(r => r.staffId === staffId && r.date === today);
+        const staff = staffs.find(s => s.id === staffId);
+        const staffCleanName = staff?.name ? staff.name.replace(/\s+/g, '') : '';
+        return records.find(r => {
+            const recCleanName = r.staffName ? r.staffName.replace(/\s+/g, '') : '';
+            const isMatch = (r.staffId === staffId) || (staffCleanName && recCleanName === staffCleanName);
+            return isMatch && normalizeDateStr(r.date) === today;
+        });
     }
 
     // 1. 出勤 (Check-in)
@@ -1010,9 +1050,22 @@ document.addEventListener('DOMContentLoaded', () => {
         // 1. Recordsマージ
         if (Array.isArray(cloudData.records) && cloudData.records.length > 0) {
             const localMap = new Map();
-            records.forEach(r => localMap.set(r.id || `${r.date}-${r.staffId}`, r));
+            records.forEach(r => {
+                r.date = normalizeDateStr(r.date);
+                if (r.checkin) r.checkin = normalizeTimeStr(r.checkin);
+                if (r.breakStart) r.breakStart = normalizeTimeStr(r.breakStart);
+                if (r.breakEnd) r.breakEnd = normalizeTimeStr(r.breakEnd);
+                if (r.checkout) r.checkout = normalizeTimeStr(r.checkout);
+                localMap.set(r.id || `${r.date}-${r.staffId}`, r);
+            });
 
             cloudData.records.forEach(cloudRec => {
+                cloudRec.date = normalizeDateStr(cloudRec.date);
+                if (cloudRec.checkin) cloudRec.checkin = normalizeTimeStr(cloudRec.checkin);
+                if (cloudRec.breakStart) cloudRec.breakStart = normalizeTimeStr(cloudRec.breakStart);
+                if (cloudRec.breakEnd) cloudRec.breakEnd = normalizeTimeStr(cloudRec.breakEnd);
+                if (cloudRec.checkout) cloudRec.checkout = normalizeTimeStr(cloudRec.checkout);
+
                 const key = cloudRec.id || `${cloudRec.date}-${cloudRec.staffId}`;
                 if (!localMap.has(key)) {
                     records.push(cloudRec);
@@ -1088,17 +1141,23 @@ document.addEventListener('DOMContentLoaded', () => {
     // Multi-PC Status Reconciliation (打刻履歴から全スタッフの出勤状態を自動計算)
     // ==========================================================================
     function reconcileStaffStatusFromRecords() {
-        const now = new Date();
-        const yyyy = now.getFullYear();
-        const mm = String(now.getMonth() + 1).padStart(2, '0');
-        const dd = String(now.getDate()).padStart(2, '0');
-        const today = `${yyyy}-${mm}-${dd}`;
+        const today = getTodayString();
 
         let statusChanged = false;
         staffs.forEach(staff => {
-            // 本日の最新打刻レコードを探す
-            const todayRecs = records.filter(r => r.staffId === staff.id && r.date === today);
-            const todayRec = todayRecs.length > 0 ? todayRecs[0] : null;
+            // 本日の最新打刻レコードを探す (ID一致 または 名前一致)
+            const staffCleanName = staff.name ? staff.name.replace(/\s+/g, '') : '';
+            const todayRecs = records.filter(r => {
+                const recCleanName = r.staffName ? r.staffName.replace(/\s+/g, '') : '';
+                const isMatch = (r.staffId === staff.id) || (staffCleanName && recCleanName === staffCleanName);
+                return isMatch && normalizeDateStr(r.date) === today;
+            });
+            
+            // 出勤中（checkinがあってcheckoutがない）レコードがあればそれを優先
+            let todayRec = null;
+            if (todayRecs.length > 0) {
+                todayRec = todayRecs.find(r => r.checkin && !r.checkout) || todayRecs[0];
+            }
 
             let newStatus = 'offline';
             if (todayRec) {
@@ -1297,10 +1356,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const endDate = elements.filterEndDate.value;
         
         const filteredRecords = records.filter(r => {
+            const d = normalizeDateStr(r.date);
             if (!startDate && !endDate) return true;
-            if (startDate && !endDate) return r.date >= startDate;
-            if (!startDate && endDate) return r.date <= endDate;
-            return r.date >= startDate && r.date <= endDate;
+            if (startDate && !endDate) return d >= startDate;
+            if (!startDate && endDate) return d <= endDate;
+            return d >= startDate && d <= endDate;
         });
         
         elements.recordsTableBody.innerHTML = '';
@@ -1323,13 +1383,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 ? `<span class="overtime-tag" title="${escapeHTML(r.overtimeReason)}"><i data-lucide="clock" style="width:12px;height:12px;"></i> ${escapeHTML(r.overtimeReason)}</span>` 
                 : '-';
 
+            const displayDate = normalizeDateStr(r.date);
+            const inTime = normalizeTimeStr(r.checkin) || '-';
+            const bStart = normalizeTimeStr(r.breakStart) || '-';
+            const bEnd = normalizeTimeStr(r.breakEnd) || '-';
+            const outTime = normalizeTimeStr(r.checkout) || '-';
+
             tr.innerHTML = `
-                <td>${r.date}${r.isCorrected ? ' <span style="font-size:0.7rem; color:var(--primary); font-weight:700;">[修正済]</span>' : ''}</td>
-                <td style="font-weight: 600;">${r.staffName}</td>
-                <td><span class="time-val">${r.checkin || '-'}</span></td>
-                <td><span class="time-val">${r.breakStart || '-'}</span></td>
-                <td><span class="time-val">${r.breakEnd || '-'}</span></td>
-                <td><span class="time-val">${r.checkout || '-'}</span></td>
+                <td>${displayDate}${r.isCorrected ? ' <span style="font-size:0.7rem; color:var(--primary); font-weight:700;">[修正済]</span>' : ''}</td>
+                <td style="font-weight: 600;">${escapeHTML(r.staffName)}</td>
+                <td><span class="time-val">${inTime}</span></td>
+                <td><span class="time-val">${bStart}</span></td>
+                <td><span class="time-val">${bEnd}</span></td>
+                <td><span class="time-val">${outTime}</span></td>
                 <td>${r.checkout ? `${hrs} 時間 (${r.duration}分)` : '-'}</td>
                 <td>${overtimeBadge}</td>
                 <td style="font-weight: 600; color: var(--primary-dark);">${r.points ? `+${r.points} pt` : '-'}</td>
@@ -1347,10 +1413,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const endDate = elements.filterEndDate.value;
 
         const filteredRecords = records.filter(r => {
+            const d = normalizeDateStr(r.date);
             if (!startDate && !endDate) return true;
-            if (startDate && !endDate) return r.date >= startDate;
-            if (!startDate && endDate) return r.date <= endDate;
-            return r.date >= startDate && r.date <= endDate;
+            if (startDate && !endDate) return d >= startDate;
+            if (!startDate && endDate) return d <= endDate;
+            return d >= startDate && d <= endDate;
         });
 
         if (filteredRecords.length === 0) {
@@ -1604,7 +1671,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         // 当日の該当スタッフのレコードを抽出
                         const dayRecords = records.filter(r => 
                             (r.staffId === matchedStaff.id || r.staffName === matchedStaff.name) && 
-                            r.date === dateStr
+                            normalizeDateStr(r.date) === dateStr
                         );
 
                         dayRecords.forEach(rec => {
