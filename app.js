@@ -31,10 +31,11 @@ document.addEventListener('DOMContentLoaded', () => {
         { id: 'st-8', name: '北口 愛美', status: 'offline', avatarColor: 'hsl(180, 75%, 40%)' },
         { id: 'st-9', name: '寺西 真名美', status: 'offline', avatarColor: 'hsl(230, 80%, 55%)' },
         { id: 'st-10', name: '植西 順子', status: 'offline', avatarColor: 'hsl(300, 70%, 45%)' },
-        { id: 'st-11', name: '看護師１', status: 'offline', avatarColor: 'hsl(320, 80%, 50%)' },
-        { id: 'st-12', name: '看護師２', status: 'offline', avatarColor: 'hsl(340, 80%, 50%)' },
-        { id: 'st-13', name: '医療事務１', status: 'offline', avatarColor: 'hsl(130, 70%, 40%)' },
-        { id: 'st-14', name: '医療事務２', status: 'offline', avatarColor: 'hsl(160, 70%, 40%)' }
+        { id: 'st-chihara', name: '千原 由佳菜', status: 'offline', avatarColor: 'hsl(15, 80%, 50%)' },
+        { id: 'st-help-ns1', name: 'HELP Ns. 1', status: 'offline', avatarColor: 'hsl(175, 75%, 40%)' },
+        { id: 'st-help-ns2', name: 'HELP Ns. 2', status: 'offline', avatarColor: 'hsl(175, 75%, 40%)' },
+        { id: 'st-help-st1', name: 'HELP St. 1', status: 'offline', avatarColor: 'hsl(215, 60%, 45%)' },
+        { id: 'st-help-st2', name: 'HELP St. 2', status: 'offline', avatarColor: 'hsl(215, 60%, 45%)' }
     ];
 
     const store = {
@@ -81,35 +82,46 @@ document.addEventListener('DOMContentLoaded', () => {
         store.set('settings', settings);
     }
 
-    // マイグレーション：古いテスト用スタッフ「佐藤 健」が残っている場合、実在スタッフへ強制リセットする
-    if (staffs.some(s => s.name === '佐藤 健')) {
-        localStorage.removeItem('clinic_flow_staffs');
-        localStorage.removeItem('clinic_flow_point_ledger');
-        localStorage.removeItem('clinic_flow_point_logs');
-        localStorage.removeItem('clinic_flow_records');
-        staffs = DEFAULT_STAFFS;
-        pointLedger = {
-            'st-1': { current: 0, lifetime: 0 },
-            'st-2': { current: 0, lifetime: 0 },
-            'st-3': { current: 0, lifetime: 0 },
-            'st-4': { current: 0, lifetime: 0 },
-            'st-5': { current: 0, lifetime: 0 },
-            'st-6': { current: 0, lifetime: 0 },
-            'st-7': { current: 0, lifetime: 0 },
-            'st-8': { current: 0, lifetime: 0 },
-            'st-9': { current: 0, lifetime: 0 },
-            'st-10': { current: 0, lifetime: 0 },
-            'st-11': { current: 0, lifetime: 0 },
-            'st-12': { current: 0, lifetime: 0 },
-            'st-13': { current: 0, lifetime: 0 },
-            'st-14': { current: 0, lifetime: 0 }
-        };
-        pointLogs = [];
-        records = [];
+    // マイグレーション：仮スタッフの名称更新（看護師１→HELP Ns. 1 など）
+    let staffMigrationNeeded = false;
+    staffs.forEach(s => {
+        if (s.name === '看護師１' || s.name === '看護師 1' || s.name === '看護師1') {
+            s.name = 'HELP Ns. 1';
+            staffMigrationNeeded = true;
+        } else if (s.name === '看護師２' || s.name === '看護師 2' || s.name === '看護師2') {
+            s.name = 'HELP Ns. 2';
+            staffMigrationNeeded = true;
+        } else if (s.name === '医療事務１' || s.name === '医療事務 1' || s.name === '医療事務1') {
+            s.name = 'HELP St. 1';
+            staffMigrationNeeded = true;
+        } else if (s.name === '医療事務２' || s.name === '医療事務 2' || s.name === '医療事務2') {
+            s.name = 'HELP St. 2';
+            staffMigrationNeeded = true;
+        }
+    });
+
+    // 末尾に HELP Ns. 1, HELP Ns. 2, HELP St. 1, HELP St. 2 がなければ追加
+    const requiredHelpStaffs = [
+        { id: 'st-help-ns1', name: 'HELP Ns. 1', color: 'hsl(175, 75%, 40%)' },
+        { id: 'st-help-ns2', name: 'HELP Ns. 2', color: 'hsl(175, 75%, 40%)' },
+        { id: 'st-help-st1', name: 'HELP St. 1', color: 'hsl(215, 60%, 45%)' },
+        { id: 'st-help-st2', name: 'HELP St. 2', color: 'hsl(215, 60%, 45%)' }
+    ];
+
+    requiredHelpStaffs.forEach(h => {
+        if (!staffs.some(s => s.name === h.name)) {
+            staffs.push({
+                id: h.id,
+                name: h.name,
+                status: 'offline',
+                avatarColor: h.color
+            });
+            staffMigrationNeeded = true;
+        }
+    });
+
+    if (staffMigrationNeeded) {
         store.set('staffs', staffs);
-        store.set('point_ledger', pointLedger);
-        store.set('point_logs', pointLogs);
-        store.set('records', records);
     }
 
     let selectedStaffId = null;
@@ -344,22 +356,30 @@ document.addEventListener('DOMContentLoaded', () => {
         '河合 茂明': { en: 'S. KAWAI', code: 'SK', theme: 'theme-navy' },
         '河合 朋子': { en: 'T. KAWAI', code: 'TK', theme: 'theme-teal' },
         '千葉 幸夫': { en: 'Y. CHIBA', code: 'YC', theme: 'theme-indigo' },
-        '尾崎 昭太': { en: 'S. OZAKI', code: 'SO', theme: 'theme-amber' },
+        '尾崎 昭太': { en: 'S. OSAKI', code: 'SO', theme: 'theme-amber' },
         '木村 哲子': { en: 'T. KIMURA', code: 'TK', theme: 'theme-emerald' },
         '末廣 綾乃': { en: 'A. SUEHIRO', code: 'AS', theme: 'theme-rose' },
-        '北口 愛美': { en: 'A. KITAGUCHI', code: 'AK', theme: 'theme-cyan' },
+        '北口 愛美': { en: 'M. KITAGUCHI', code: 'MK', theme: 'theme-cyan' },
         '寺西 真名美': { en: 'M. TERANISHI', code: 'MT', theme: 'theme-purple' },
         '植西 順子': { en: 'J. UENISHI', code: 'JU', theme: 'theme-fuchsia' },
         '千原 由佳菜': { en: 'Y. CHIHARA', code: 'YC', theme: 'theme-coral' },
         'マックアリース 温子': { en: 'A. MCALEESE', code: 'AM', theme: 'theme-ruby' },
-        '看護師１': { en: 'NURSE 01', code: 'N1', theme: 'theme-teal' },
-        '看護師 1': { en: 'NURSE 01', code: 'N1', theme: 'theme-teal' },
-        '看護師２': { en: 'NURSE 02', code: 'N2', theme: 'theme-teal' },
-        '看護師 2': { en: 'NURSE 02', code: 'N2', theme: 'theme-teal' },
-        '医療事務１': { en: 'STAFF 01', code: 'S1', theme: 'theme-slate' },
-        '医療事務 1': { en: 'STAFF 01', code: 'S1', theme: 'theme-slate' },
-        '医療事務２': { en: 'STAFF 02', code: 'S2', theme: 'theme-slate' },
-        '医療事務 2': { en: 'STAFF 02', code: 'S2', theme: 'theme-slate' }
+        
+        // ヘルプスタッフ（仮）
+        'HELP Ns. 1': { en: 'HELP Ns. 1', code: 'HN1', theme: 'theme-teal', sub: '応援看護師 1' },
+        'HELP Ns. 2': { en: 'HELP Ns. 2', code: 'HN2', theme: 'theme-teal', sub: '応援看護師 2' },
+        'HELP St. 1': { en: 'HELP St. 1', code: 'HS1', theme: 'theme-slate', sub: '応援事務 1' },
+        'HELP St. 2': { en: 'HELP St. 2', code: 'HS2', theme: 'theme-slate', sub: '応援事務 2' },
+
+        // 旧仮名からのエイリアス
+        '看護師１': { en: 'HELP Ns. 1', code: 'HN1', theme: 'theme-teal', sub: '応援看護師 1' },
+        '看護師 1': { en: 'HELP Ns. 1', code: 'HN1', theme: 'theme-teal', sub: '応援看護師 1' },
+        '看護師２': { en: 'HELP Ns. 2', code: 'HN2', theme: 'theme-teal', sub: '応援看護師 2' },
+        '看護師 2': { en: 'HELP Ns. 2', code: 'HN2', theme: 'theme-teal', sub: '応援看護師 2' },
+        '医療事務１': { en: 'HELP St. 1', code: 'HS1', theme: 'theme-slate', sub: '応援事務 1' },
+        '医療事務 1': { en: 'HELP St. 1', code: 'HS1', theme: 'theme-slate', sub: '応援事務 1' },
+        '医療事務２': { en: 'HELP St. 2', code: 'HS2', theme: 'theme-slate', sub: '応援事務 2' },
+        '医療事務 2': { en: 'HELP St. 2', code: 'HS2', theme: 'theme-slate', sub: '応援事務 2' }
     };
 
     const THEME_CYCLE = ['theme-navy', 'theme-teal', 'theme-indigo', 'theme-emerald', 'theme-rose', 'theme-amber', 'theme-purple', 'theme-cyan', 'theme-coral', 'theme-fuchsia'];
@@ -436,7 +456,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     ${statusDot}
                 </div>
                 <div class="staff-card-en-name">${escapeHTML(profile.en)}</div>
-                <div class="staff-card-jp-name">${escapeHTML(staff.name)}</div>
+                <div class="staff-card-jp-name">${escapeHTML(profile.sub || staff.name)}</div>
                 <div class="status-badge ${statusBadgeClass}">${statusText}</div>
             `;
 
@@ -473,7 +493,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const profile = getStaffDisplayProfile(staff);
         elements.activeStaffName.innerHTML = `
             <div style="font-family: 'Plus Jakarta Sans', system-ui, sans-serif; font-weight: 800; font-size: 1.25rem; letter-spacing: 0.04em; color: #0f172a;">${escapeHTML(profile.en)}</div>
-            <div style="font-size: 0.85rem; color: #64748b; font-weight: 600; margin-top: 3px;">${escapeHTML(staff.name)}</div>
+            <div style="font-size: 0.85rem; color: #64748b; font-weight: 600; margin-top: 3px;">${escapeHTML(profile.sub || staff.name)}</div>
         `;
         elements.activeStaffInitial.textContent = profile.code;
         elements.activeStaffAvatar.className = `staff-avatar ${profile.theme}`;
