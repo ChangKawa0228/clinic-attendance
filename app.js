@@ -337,34 +337,107 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // ==========================================================================
+    // Staff Profile & International Styling Helper (Apple-like Modern Design)
+    // ==========================================================================
+    const KNOWN_STAFF_PROFILES = {
+        '河合 茂明': { en: 'S. KAWAI', code: 'SK', theme: 'theme-navy' },
+        '河合 朋子': { en: 'T. KAWAI', code: 'TK', theme: 'theme-teal' },
+        '千葉 幸夫': { en: 'Y. CHIBA', code: 'YC', theme: 'theme-indigo' },
+        '尾崎 昭太': { en: 'S. OZAKI', code: 'SO', theme: 'theme-amber' },
+        '木村 哲子': { en: 'T. KIMURA', code: 'TK', theme: 'theme-emerald' },
+        '末廣 綾乃': { en: 'A. SUEHIRO', code: 'AS', theme: 'theme-rose' },
+        '北口 愛美': { en: 'A. KITAGUCHI', code: 'AK', theme: 'theme-cyan' },
+        '寺西 真名美': { en: 'M. TERANISHI', code: 'MT', theme: 'theme-purple' },
+        '植西 順子': { en: 'J. UENISHI', code: 'JU', theme: 'theme-fuchsia' },
+        '千原 由佳菜': { en: 'Y. CHIHARA', code: 'YC', theme: 'theme-coral' },
+        'マックアリース 温子': { en: 'A. MCALEESE', code: 'AM', theme: 'theme-ruby' },
+        '看護師１': { en: 'NURSE 01', code: 'N1', theme: 'theme-teal' },
+        '看護師 1': { en: 'NURSE 01', code: 'N1', theme: 'theme-teal' },
+        '看護師２': { en: 'NURSE 02', code: 'N2', theme: 'theme-teal' },
+        '看護師 2': { en: 'NURSE 02', code: 'N2', theme: 'theme-teal' },
+        '医療事務１': { en: 'STAFF 01', code: 'S1', theme: 'theme-slate' },
+        '医療事務 1': { en: 'STAFF 01', code: 'S1', theme: 'theme-slate' },
+        '医療事務２': { en: 'STAFF 02', code: 'S2', theme: 'theme-slate' },
+        '医療事務 2': { en: 'STAFF 02', code: 'S2', theme: 'theme-slate' }
+    };
+
+    const THEME_CYCLE = ['theme-navy', 'theme-teal', 'theme-indigo', 'theme-emerald', 'theme-rose', 'theme-amber', 'theme-purple', 'theme-cyan', 'theme-coral', 'theme-fuchsia'];
+
+    function getStaffDisplayProfile(staff) {
+        if (!staff || !staff.name) {
+            return { en: 'STAFF', code: 'ST', theme: 'theme-navy' };
+        }
+        const clean = staff.name.trim();
+        for (const key in KNOWN_STAFF_PROFILES) {
+            if (clean === key || clean.replace(/\s+/g, '') === key.replace(/\s+/g, '')) {
+                return KNOWN_STAFF_PROFILES[key];
+            }
+        }
+
+        // 新規スタッフ用の自動生成
+        const parts = clean.split(/[\s　]+/);
+        let enName = clean;
+        let code = clean.substring(0, 2).toUpperCase();
+
+        if (parts.length >= 2) {
+            const family = parts[0];
+            const given = parts[1];
+            const gInitial = given.charAt(0).toUpperCase();
+            enName = `${gInitial}. ${family.toUpperCase()}`;
+            code = `${gInitial}${family.charAt(0).toUpperCase()}`;
+        } else {
+            code = clean.substring(0, 2).toUpperCase();
+            enName = clean.toUpperCase();
+        }
+
+        let hash = 0;
+        for (let i = 0; i < clean.length; i++) hash += clean.charCodeAt(i);
+        const theme = THEME_CYCLE[hash % THEME_CYCLE.length];
+
+        return { en: enName, code: code, theme: theme };
+    }
+
     // Render staff cards in the main screen
     function renderStaffGrid() {
         elements.staffGrid.innerHTML = '';
         
         staffs.forEach(staff => {
+            const profile = getStaffDisplayProfile(staff);
             const card = document.createElement('div');
-            card.className = `staff-card ${selectedStaffId === staff.id ? 'active-selection' : ''}`;
+            
+            const isOnline = staff.status === 'online';
+            const isBreak = staff.status === 'break';
+            const statusClassModifier = isOnline ? 'is-online' : (isBreak ? 'is-break' : 'is-offline');
+            const activeClass = selectedStaffId === staff.id ? 'active-selection' : '';
+
+            card.className = `staff-card ${statusClassModifier} ${activeClass}`;
             card.dataset.id = staff.id;
             
-            // Build status HTML
             let statusText = '未出勤';
-            let statusClass = 'status-offline';
-            if (staff.status === 'online') {
+            let statusBadgeClass = 'status-offline';
+            let statusDot = '';
+
+            if (isOnline) {
                 statusText = '勤務中';
-                statusClass = 'status-online';
-            } else if (staff.status === 'break') {
+                statusBadgeClass = 'status-online';
+                statusDot = '<div class="live-status-dot" title="勤務中 (LIVE)"></div>';
+            } else if (isBreak) {
                 statusText = '休憩中';
-                statusClass = 'status-break';
+                statusBadgeClass = 'status-break';
+                statusDot = '<div class="break-status-dot" title="休憩中"></div>';
             }
 
-            const initial = staff.name.charAt(0);
-
             card.innerHTML = `
-                <div class="staff-card-avatar" style="border: 2px solid ${staff.avatarColor || '#0052cc'}; color: ${staff.avatarColor || '#0052cc'}">
-                    <span>${initial}</span>
+                <div class="staff-avatar-wrap">
+                    <div class="staff-card-avatar ${profile.theme}">
+                        <span>${escapeHTML(profile.code)}</span>
+                    </div>
+                    ${statusDot}
                 </div>
-                <div class="staff-card-name">${escapeHTML(staff.name)}</div>
-                <div class="status-badge ${statusClass}">${statusText}</div>
+                <div class="staff-card-en-name">${escapeHTML(profile.en)}</div>
+                <div class="staff-card-jp-name">${escapeHTML(staff.name)}</div>
+                <div class="status-badge ${statusBadgeClass}">${statusText}</div>
             `;
 
             card.addEventListener('click', () => selectStaff(staff.id));
@@ -396,11 +469,16 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.controlPanel.querySelector('.panel-placeholder').classList.add('hidden');
         elements.controlPanel.querySelector('.panel-content').classList.remove('hidden');
 
-        // Set Info
-        elements.activeStaffName.textContent = staff.name;
-        elements.activeStaffInitial.textContent = staff.name.charAt(0);
-        elements.activeStaffAvatar.style.backgroundColor = staff.avatarColor || 'var(--primary-light)';
-        elements.activeStaffAvatar.style.color = staff.avatarColor ? '#fff' : 'var(--primary)';
+        // Set Info with internationalized typography & luxury gradient
+        const profile = getStaffDisplayProfile(staff);
+        elements.activeStaffName.innerHTML = `
+            <div style="font-family: 'Plus Jakarta Sans', system-ui, sans-serif; font-weight: 800; font-size: 1.25rem; letter-spacing: 0.04em; color: #0f172a;">${escapeHTML(profile.en)}</div>
+            <div style="font-size: 0.85rem; color: #64748b; font-weight: 600; margin-top: 3px;">${escapeHTML(staff.name)}</div>
+        `;
+        elements.activeStaffInitial.textContent = profile.code;
+        elements.activeStaffAvatar.className = `staff-avatar ${profile.theme}`;
+        elements.activeStaffAvatar.style.backgroundColor = '';
+        elements.activeStaffAvatar.style.color = '#ffffff';
 
         updateControlPanelState(staff);
     }
@@ -742,13 +820,15 @@ document.addEventListener('DOMContentLoaded', () => {
             const row = document.createElement('div');
             row.className = 'alloc-staff-row';
             row.id = `alloc-row-${peer.id}`;
-            const initial = peer.name ? peer.name.trim().charAt(0) : '?';
-            const color = peer.avatarColor || 'var(--primary)';
+            const profile = getStaffDisplayProfile(peer);
 
             row.innerHTML = `
                 <div class="alloc-staff-info">
-                    <div class="alloc-mini-avatar" style="background: ${color};">${escapeHTML(initial)}</div>
-                    <span>${escapeHTML(peer.name)}</span>
+                    <div class="alloc-mini-avatar ${profile.theme}" style="font-weight:800; font-size:0.75rem; letter-spacing:0.02em;">${escapeHTML(profile.code)}</div>
+                    <div style="display:flex; flex-direction:column; line-height:1.2;">
+                        <span style="font-weight:800; font-family:'Plus Jakarta Sans',sans-serif; font-size:0.9rem; color:#0f172a;">${escapeHTML(profile.en)}</span>
+                        <span style="font-size:0.75rem; color:#64748b;">${escapeHTML(peer.name)}</span>
+                    </div>
                 </div>
                 <div class="alloc-counter">
                     <button type="button" class="btn-alloc-step" data-action="dec" data-id="${peer.id}" disabled>-</button>
