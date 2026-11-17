@@ -1532,3 +1532,130 @@ body {
 .alloc-staff-row.has-points .alloc-val-display {
     color: #059669;
 }
+
+/* ==========================================================================
+   Lesser Panda Director Running Animation (遊び心演出)
+   ========================================================================== */
+.mascot-runner-container {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100vw;
+    height: 240px;
+    pointer-events: none;
+    z-index: 99999;
+    overflow: hidden;
+}
+
+.mascot-runner {
+    position: absolute;
+    bottom: 12px;
+    right: -320px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    pointer-events: none;
+    will-change: transform;
+    animation: mascotRunAcross 4.2s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+/* 右から左へ画面を横断 */
+@keyframes mascotRunAcross {
+    0% {
+        transform: translateX(0);
+    }
+    100% {
+        transform: translateX(calc(-100vw - 420px));
+    }
+}
+
+/* 走るときのピョコピョコ上下・揺れ（トコトコ走り） */
+.mascot-waddle-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    animation: mascotWaddle 0.24s infinite alternate ease-in-out;
+}
+
+@keyframes mascotWaddle {
+    0% {
+        transform: translateY(0) rotate(-6deg);
+    }
+    100% {
+        transform: translateY(-16px) rotate(4deg);
+    }
+}
+
+/* レッサーパンダ画像 */
+.mascot-img {
+    width: 135px;
+    height: auto;
+    display: block;
+    filter: drop-shadow(0 10px 22px rgba(15, 23, 42, 0.22));
+    user-select: none;
+    pointer-events: none;
+}
+
+/* マンガ風吹き出し */
+.mascot-bubble {
+    position: relative;
+    background: #ffffff;
+    border: 2px solid #f97316;
+    color: #0f172a;
+    font-size: 0.95rem;
+    font-weight: 800;
+    line-height: 1.35;
+    padding: 0.65rem 1.15rem;
+    border-radius: 20px;
+    box-shadow: 0 8px 24px rgba(249, 115, 22, 0.25), 0 2px 8px rgba(0, 0, 0, 0.08);
+    margin-bottom: 0.5rem;
+    white-space: nowrap;
+    animation: bubblePop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    transform-origin: bottom center;
+}
+
+/* 吹き出しのしっぽ（右下・レッサーパンダの口元へ向かう） */
+.mascot-bubble::after {
+    content: '';
+    position: absolute;
+    bottom: -9px;
+    right: 45px;
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-width: 10px 9px 0 9px;
+    border-color: #ffffff transparent transparent transparent;
+}
+
+.mascot-bubble::before {
+    content: '';
+    position: absolute;
+    bottom: -12px;
+    right: 43px;
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-width: 12px 11px 0 11px;
+    border-color: #f97316 transparent transparent transparent;
+}
+
+@keyframes bubblePop {
+    0% {
+        transform: scale(0.6);
+        opacity: 0;
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+/* 退勤時の吹き出しテーマ（優しいバイオレット/ブルー） */
+.mascot-bubble.checkout-theme {
+    border-color: #6366f1;
+    box-shadow: 0 8px 24px rgba(99, 102, 241, 0.25), 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.mascot-bubble.checkout-theme::before {
+    border-color: #6366f1 transparent transparent transparent;
+}

@@ -613,6 +613,60 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // ==========================================================================
+    // Mascot Runner Animation (レッサーパンダ院長 駆け抜け演出)
+    // ==========================================================================
+    const CHECKIN_MASCOT_MESSAGES = [
+        '{name}さん、おはよう！今日も頑張ろう！🐾',
+        '{name}さん、おはようございます！今日もファイト！🩺',
+        '{name}さん、おはよう！今日も患者さんの笑顔のために頑張ろう〜！✨',
+        '{name}さん、おはよう！今日も素敵な一日にしようね〜！🐾',
+        '{name}さん、おはようございます！水分補給も忘れずにね〜！☕',
+        'おはよう！今日もみんなで力を合わせて頑張ろう！🐾'
+    ];
+
+    const CHECKOUT_MASCOT_MESSAGES = [
+        '{name}さん、今日も一日お疲れ様でした！ゆっくり休んでね〜！🌙',
+        '{name}さん、お疲れ様！今日もありがとう！気をつけて帰ってね🐾',
+        '{name}さん、お疲れ様でした！ナイスサポートでした！✨',
+        '{name}さん、今日も大活躍でした！お風呂で温まってね〜！🛁'
+    ];
+
+    function triggerMascotRun(staffName, type = 'checkin') {
+        const container = document.getElementById('mascot-runner-container');
+        if (!container) return;
+
+        // 既存の走っている院長をクリア
+        container.innerHTML = '';
+
+        const cleanName = staffName ? staffName.split(/[\s　]+/)[0] : '';
+        const messages = type === 'checkin' ? CHECKIN_MASCOT_MESSAGES : CHECKOUT_MASCOT_MESSAGES;
+        const template = messages[Math.floor(Math.random() * messages.length)];
+        const text = template.replace('{name}', cleanName);
+
+        const runner = document.createElement('div');
+        runner.className = 'mascot-runner';
+        const isCheckout = (type === 'checkout');
+
+        runner.innerHTML = `
+            <div class="mascot-waddle-box">
+                <div class="mascot-bubble ${isCheckout ? 'checkout-theme' : ''}">
+                    ${escapeHTML(text)}
+                </div>
+                <img src="images/lesser-doctor.png" alt="レッサーパンダ院長" class="mascot-img">
+            </div>
+        `;
+
+        container.appendChild(runner);
+
+        // 4.5秒後に自動消去
+        setTimeout(() => {
+            if (runner.parentNode) {
+                runner.parentNode.removeChild(runner);
+            }
+        }, 4500);
+    }
+
     // 1. 出勤 (Check-in)
     elements.btnCheckin.addEventListener('click', () => {
         if (!selectedStaffId) return;
@@ -647,6 +701,9 @@ document.addEventListener('DOMContentLoaded', () => {
         updateControlPanelState(staff);
         syncWithGoogleSheets(true);
         showToast(`${staff.name}さん、おはようございます。出勤を記録しました。`, 'success');
+
+        // レッサーパンダ院長が走って応援！
+        triggerMascotRun(staff.name, 'checkin');
     });
 
     // 2. 休憩 (Break Toggle: Start/End)
@@ -796,6 +853,7 @@ document.addEventListener('DOMContentLoaded', () => {
             closeControlPanel();
             syncWithGoogleSheets(true);
             showToast(`${staff.name}さん、お疲れ様でした。退勤を記録しました。(勤務時間: ${(workMinutes/60).toFixed(1)}時間)`, 'success');
+            triggerMascotRun(staff.name, 'checkout');
         }
     });
 
@@ -1027,6 +1085,9 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             showToast(`${staff.name}さんの退勤を記録しました。${record.overtimeReason ? ' (残業理由を記録済)' : ''}`, 'success');
         }
+
+        // レッサーパンダ院長が走ってお疲れ様を伝える！
+        triggerMascotRun(staff.name, 'checkout');
     }
 
     function parseTimeToDate(dateStr, timeStr) {
