@@ -1534,114 +1534,182 @@ body {
 }
 
 /* ==========================================================================
-   Lesser Panda Director Running Animation (遊び心演出)
+   Lesser Panda Director Popup & Schedule Notification (右下登場・20秒案内)
    ========================================================================== */
 .mascot-runner-container {
     position: fixed;
-    bottom: 0;
-    left: 0;
-    width: 100vw;
-    height: 240px;
+    bottom: 16px;
+    right: 24px;
     pointer-events: none;
     z-index: 99999;
-    overflow: hidden;
 }
 
 .mascot-runner {
-    position: absolute;
-    bottom: 12px;
-    right: -320px;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    pointer-events: none;
-    will-change: transform;
-    animation: mascotRunAcross 4.2s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+    align-items: flex-end;
+    pointer-events: auto;
+    will-change: transform, opacity;
+    animation: mascotSlideUp 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* 右から左へ画面を横断 */
-@keyframes mascotRunAcross {
+.mascot-runner.leaving {
+    animation: mascotSlideDown 0.5s cubic-bezier(0.7, 0, 0.84, 0) forwards;
+}
+
+/* 右下からひょっこり現れる */
+@keyframes mascotSlideUp {
     0% {
-        transform: translateX(0);
+        transform: translateY(120%) scale(0.92);
+        opacity: 0;
     }
     100% {
-        transform: translateX(calc(-100vw - 420px));
+        transform: translateY(0) scale(1);
+        opacity: 1;
     }
 }
 
-/* 走るときのピョコピョコ上下・揺れ（トコトコ走り） */
+/* 右下へすっと帰っていく */
+@keyframes mascotSlideDown {
+    0% {
+        transform: translateY(0) scale(1);
+        opacity: 1;
+    }
+    100% {
+        transform: translateY(120%) scale(0.92);
+        opacity: 0;
+    }
+}
+
+/* その場でやさしく息づくような可愛い動き（20秒間） */
 .mascot-waddle-box {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    animation: mascotWaddle 0.24s infinite alternate ease-in-out;
+    align-items: flex-end;
+    animation: mascotGentleFloat 2.6s infinite ease-in-out;
+    transform-origin: bottom right;
 }
 
-@keyframes mascotWaddle {
-    0% {
-        transform: translateY(0) rotate(-6deg);
+@keyframes mascotGentleFloat {
+    0%, 100% {
+        transform: translateY(0) rotate(0deg);
     }
-    100% {
-        transform: translateY(-16px) rotate(4deg);
+    50% {
+        transform: translateY(-6px) rotate(1.2deg);
     }
 }
 
-/* レッサーパンダ画像 */
+/* レッサーパンダ院長画像 */
 .mascot-img {
-    width: 135px;
+    width: 140px;
     height: auto;
     display: block;
-    filter: drop-shadow(0 10px 22px rgba(15, 23, 42, 0.22));
+    margin-right: 15px;
+    filter: drop-shadow(0 12px 28px rgba(15, 23, 42, 0.28));
     user-select: none;
     pointer-events: none;
 }
 
-/* マンガ風吹き出し */
+/* マンガ風吹き出し（20秒間じっくり読める大型吹き出し） */
 .mascot-bubble {
     position: relative;
     background: #ffffff;
-    border: 2px solid #f97316;
+    border: 2.5px solid #f97316;
     color: #0f172a;
     font-size: 0.95rem;
-    font-weight: 800;
-    line-height: 1.35;
-    padding: 0.65rem 1.15rem;
+    font-weight: 600;
+    line-height: 1.5;
+    padding: 0.85rem 1.25rem;
     border-radius: 20px;
-    box-shadow: 0 8px 24px rgba(249, 115, 22, 0.25), 0 2px 8px rgba(0, 0, 0, 0.08);
-    margin-bottom: 0.5rem;
-    white-space: nowrap;
-    animation: bubblePop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-    transform-origin: bottom center;
+    box-shadow: 0 10px 30px rgba(249, 115, 22, 0.28), 0 4px 12px rgba(0, 0, 0, 0.1);
+    margin-bottom: 0.6rem;
+    max-width: 320px;
+    white-space: normal;
+    animation: bubblePop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+    transform-origin: bottom right;
 }
 
-/* 吹き出しのしっぽ（右下・レッサーパンダの口元へ向かう） */
+.mascot-bubble-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    font-weight: 800;
+    color: #ea580c;
+    margin-bottom: 0.35rem;
+    border-bottom: 1px dashed #fdba74;
+    padding-bottom: 0.3rem;
+    letter-spacing: 0.02em;
+}
+
+.mascot-bubble-close {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    cursor: pointer;
+    padding: 0 0.2rem;
+    font-size: 1rem;
+    line-height: 1;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.mascot-bubble-close:hover {
+    color: #0f172a;
+    background: #f1f5f9;
+}
+
+.mascot-bubble-body {
+    font-size: 0.92rem;
+    color: #1e293b;
+}
+
+.mascot-bubble-event-highlight {
+    display: block;
+    margin-top: 0.4rem;
+    padding: 0.4rem 0.65rem;
+    background: #fff7ed;
+    border: 1px solid #fed7aa;
+    border-radius: 8px;
+    font-size: 0.86rem;
+    font-weight: 700;
+    color: #c2410c;
+}
+
+.mascot-bubble-event-highlight i {
+    width: 13px;
+    height: 13px;
+    vertical-align: -2px;
+}
+
+/* 吹き出しのしっぽ（右下・レッサーパンダの頭上へ向かう） */
 .mascot-bubble::after {
     content: '';
     position: absolute;
-    bottom: -9px;
-    right: 45px;
+    bottom: -11px;
+    right: 55px;
     width: 0;
     height: 0;
     border-style: solid;
-    border-width: 10px 9px 0 9px;
+    border-width: 12px 10px 0 10px;
     border-color: #ffffff transparent transparent transparent;
 }
 
 .mascot-bubble::before {
     content: '';
     position: absolute;
-    bottom: -12px;
-    right: 43px;
+    bottom: -15px;
+    right: 53px;
     width: 0;
     height: 0;
     border-style: solid;
-    border-width: 12px 11px 0 11px;
+    border-width: 15px 12px 0 12px;
     border-color: #f97316 transparent transparent transparent;
 }
 
 @keyframes bubblePop {
     0% {
-        transform: scale(0.6);
+        transform: scale(0.65);
         opacity: 0;
     }
     100% {
@@ -1653,7 +1721,12 @@ body {
 /* 退勤時の吹き出しテーマ（優しいバイオレット/ブルー） */
 .mascot-bubble.checkout-theme {
     border-color: #6366f1;
-    box-shadow: 0 8px 24px rgba(99, 102, 241, 0.25), 0 2px 8px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 10px 30px rgba(99, 102, 241, 0.28), 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.mascot-bubble.checkout-theme .mascot-bubble-title {
+    color: #4f46e5;
+    border-bottom-color: #c7d2fe;
 }
 
 .mascot-bubble.checkout-theme::before {

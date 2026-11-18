@@ -729,51 +729,104 @@ document.addEventListener('DOMContentLoaded', () => {
         '{name}さん、今日も大活躍でした！お風呂で温まってね〜！🛁'
     ];
 
+    let mascotDismissTimer = null;
+
+    function dismissMascotPopup(runner) {
+        if (!runner || !runner.parentNode) return;
+        if (mascotDismissTimer) {
+            clearTimeout(mascotDismissTimer);
+            mascotDismissTimer = null;
+        }
+        runner.classList.add('leaving');
+        setTimeout(() => {
+            if (runner.parentNode) {
+                runner.parentNode.removeChild(runner);
+            }
+        }, 500);
+    }
+
     function triggerMascotRun(staffName, type = 'checkin', eventHint = null) {
         const container = document.getElementById('mascot-runner-container');
         if (!container) return;
 
-        // 既存の走っている院長をクリア
+        // 既存のタイマーをクリアしてコンテナを初期化
+        if (mascotDismissTimer) {
+            clearTimeout(mascotDismissTimer);
+            mascotDismissTimer = null;
+        }
         container.innerHTML = '';
 
         const cleanName = staffName ? staffName.split(/[\s　]+/)[0] : '';
-        let text = '';
+        const isCheckout = (type === 'checkout');
+        
+        let headerTitle = '';
+        let bodyHtml = '';
 
         if (type === 'checkin' && eventHint) {
-            const eventMessages = [
-                `{name}さん、おはよう！今日は『${eventHint}』があるよ！🐾`,
-                `{name}さん、おはようございます！今日は『${eventHint}』の予定だね✨`,
-                `{name}さん、出勤ナイス！今日は『${eventHint}』を要チェックだよ〜🩺`,
-                `おはよう！今日は『${eventHint}』があるから気をつけていこうね🐾`
-            ];
-            text = eventMessages[Math.floor(Math.random() * eventMessages.length)].replace('{name}', cleanName);
+            headerTitle = '<i data-lucide="bell" style="width:13px;height:13px;margin-right:3px;"></i> 院長からの本日の連絡';
+            bodyHtml = `
+                <div><strong>${escapeHTML(cleanName)}さん</strong>、おはようございます！今日もよろしくお願いします✨</div>
+                <div class="mascot-bubble-event-highlight">
+                    <i data-lucide="calendar"></i> <strong>本日の予定:</strong> ${escapeHTML(eventHint)}
+                </div>
+            `;
+        } else if (type === 'checkin') {
+            headerTitle = '<i data-lucide="sparkles" style="width:13px;height:13px;margin-right:3px;"></i> 院長からのメッセージ';
+            const template = CHECKIN_MASCOT_MESSAGES[Math.floor(Math.random() * CHECKIN_MASCOT_MESSAGES.length)];
+            const text = template.replace('{name}', cleanName);
+            bodyHtml = `<div>${escapeHTML(text)}</div>`;
         } else {
-            const messages = type === 'checkin' ? CHECKIN_MASCOT_MESSAGES : CHECKOUT_MASCOT_MESSAGES;
-            const template = messages[Math.floor(Math.random() * messages.length)];
-            text = template.replace('{name}', cleanName);
+            headerTitle = '<i data-lucide="moon" style="width:13px;height:13px;margin-right:3px;"></i> 院長からのお疲れさま';
+            const template = CHECKOUT_MASCOT_MESSAGES[Math.floor(Math.random() * CHECKOUT_MASCOT_MESSAGES.length)];
+            const text = template.replace('{name}', cleanName);
+            bodyHtml = `<div>${escapeHTML(text)}</div>`;
         }
 
         const runner = document.createElement('div');
         runner.className = 'mascot-runner';
-        const isCheckout = (type === 'checkout');
 
         runner.innerHTML = `
             <div class="mascot-waddle-box">
                 <div class="mascot-bubble ${isCheckout ? 'checkout-theme' : ''}">
-                    ${escapeHTML(text)}
+                    <div class="mascot-bubble-title">
+                        <span>${headerTitle}</span>
+                        <button type="button" class="mascot-bubble-close" title="閉じる">×</button>
+                    </div>
+                    <div class="mascot-bubble-body">
+                        ${bodyHtml}
+                    </div>
                 </div>
                 <img src="images/lesser-doctor.png" alt="レッサーパンダ院長" class="mascot-img">
             </div>
         `;
 
-        container.appendChild(runner);
+        // 閉じるボタンのリスナー
+        const closeBtn = runner.querySelector('.mascot-bubble-close');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                dismissMascotPopup(runner);
+            });
+        }
 
-        // 4.5秒後に自動消去
-        setTimeout(() => {
-            if (runner.parentNode) {
-                runner.parentNode.removeChild(runner);
-            }
-        }, 4500);
+        // 吹き出し全体をクリックしたとき、イベントがあれば予定モーダルを表示
+        const bubble = runner.querySelector('.mascot-bubble');
+        if (bubble && eventHint) {
+            bubble.style.cursor = 'pointer';
+            bubble.title = 'クリックして予定一覧を表示';
+            bubble.addEventListener('click', () => {
+                showTodayEventsModal(staffName);
+            });
+        }
+
+        container.appendChild(runner);
+        if (window.lucide) lucide.createIcons();
+
+        // 連絡があるときは20秒間じっくり表示（通常メッセージは12秒）、その後右下に帰っていく
+        const displayDuration = (type === 'checkin' && eventHint) ? 20000 : 12000;
+        mascotDismissTimer = setTimeout(() => {
+            dismissMascotPopup(runner);
+        }, displayDuration);
     }
 
     // カレンダーバナー・モーダル開閉リスナー
@@ -821,14 +874,16 @@ document.addEventListener('DOMContentLoaded', () => {
         syncWithGoogleSheets(true);
         showToast(`${staff.name}さん、おはようございます。出勤を記録しました。`, 'success');
 
-        // 本日の予定がある場合は出勤時アラートモーダルを表示 & 院長が予定をアナウンス！
+        // 本日の予定がある場合は院長が右下から登場して20秒間アナウンス！
         if (todayEvents && todayEvents.length > 0) {
-            showTodayEventsModal(staff.name);
             const firstEv = todayEvents[0];
-            const eventHint = firstEv.isAllDay ? firstEv.title : `${firstEv.startTime} ${firstEv.title}`;
-            triggerMascotRun(staff.name, 'checkin', eventHint);
+            let hint = firstEv.isAllDay ? firstEv.title : `${firstEv.startTime} ${firstEv.title}`;
+            if (todayEvents.length > 1) {
+                hint += ` (他${todayEvents.length - 1}件あり)`;
+            }
+            triggerMascotRun(staff.name, 'checkin', hint);
         } else {
-            // レッサーパンダ院長が走って応援！
+            // レッサーパンダ院長が応援メッセージ！
             triggerMascotRun(staff.name, 'checkin');
         }
     });
