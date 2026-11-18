@@ -1,6 +1,7 @@
 function doGet(e) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var allData = loadAllData(ss);
+  var calendarId = (e && e.parameter && e.parameter.calendarId) ? e.parameter.calendarId : "honmachifc@gmail.com";
+  var allData = loadAllData(ss, calendarId);
   var callback = (e && e.parameter && e.parameter.callback) ? e.parameter.callback : null;
   var json = JSON.stringify({ success: true, data: allData });
   
@@ -39,7 +40,8 @@ function doPost(e) {
       saveRequests(ss, postData.correctionRequests);
     }
 
-    var currentData = loadAllData(ss);
+    var calendarId = postData.calendarId || "honmachifc@gmail.com";
+    var currentData = loadAllData(ss, calendarId);
     return ContentService.createTextOutput(JSON.stringify({ success: true, data: currentData }))
       .setMimeType(ContentService.MimeType.JSON);
   }
@@ -61,13 +63,60 @@ function parseJson(str) {
   }
 }
 
-function loadAllData(ss) {
+function loadAllData(ss, calendarId) {
   return {
     records: loadRecords(ss),
     pointLedger: loadPointLedger(ss),
     pointLogs: loadPointLogs(ss),
-    correctionRequests: loadRequests(ss)
+    correctionRequests: loadRequests(ss),
+    calendarEvents: getTodayCalendarEvents(calendarId)
   };
+}
+
+function getTodayCalendarEvents(calendarId) {
+  var targetId = calendarId || "honmachifc@gmail.com";
+  try {
+    var cal = CalendarApp.getCalendarById(targetId);
+    if (!cal) {
+      cal = CalendarApp.getDefaultCalendar();
+    }
+    if (!cal) return [];
+
+    var now = new Date();
+    var events = cal.getEventsForDay(now);
+    var result = [];
+
+    for (var i = 0; i < events.length; i++) {
+      var ev = events[i];
+      var isAllDay = ev.isAllDayEvent();
+      var startStr = "";
+      var endStr = "";
+
+      if (isAllDay) {
+        startStr = "終日";
+      } else {
+        var start = ev.getStartTime();
+        var end = ev.getEndTime();
+        startStr = Utilities.formatDate(start, Session.getScriptTimeZone(), 'HH:mm');
+        endStr = Utilities.formatDate(end, Session.getScriptTimeZone(), 'HH:mm');
+      }
+
+      result.push({
+        id: ev.getId(),
+        title: ev.getTitle() || "（タイトルなし）",
+        isAllDay: isAllDay,
+        startTime: startStr,
+        endTime: endStr,
+        timeDisplay: isAllDay ? "終日" : (startStr + (endStr ? "〜" + endStr : "")),
+        location: ev.getLocation() || "",
+        description: ev.getDescription() || ""
+      });
+    }
+
+    return result;
+  } catch (err) {
+    return [];
+  }
 }
 
 function loadRecords(ss) {

@@ -52,6 +52,19 @@
             </div>
         </div>
 
+        <!-- Today's Clinic Calendar Banner (本日のクリニック予定バー) -->
+        <div id="today-calendar-banner" class="today-calendar-banner">
+            <div class="banner-content">
+                <div class="banner-left">
+                    <span class="calendar-badge"><i data-lucide="calendar"></i> 本日の予定</span>
+                    <span id="calendar-summary-text" class="calendar-summary-text">本日の予定を取得中...</span>
+                </div>
+                <button type="button" id="btn-view-calendar" class="btn-banner-action">
+                    一覧を表示 <i data-lucide="chevron-right"></i>
+                </button>
+            </div>
+        </div>
+
         <!-- Main Content (Staff Board) -->
         <main id="main-attendance" class="main-layout">
             <!-- Staff List Grid -->
@@ -347,6 +360,24 @@
                                 </div>
                             </div>
 
+                            <h3>Googleカレンダー連携 (本日の予定自動取得)</h3>
+                            <div class="admin-form" style="background: white; padding: 1.25rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); margin-bottom: 1.5rem;">
+                                <div class="form-group">
+                                    <label for="calendar-id">クリニック GoogleカレンダーID</label>
+                                    <input type="text" id="calendar-id" class="form-control" placeholder="honmachifc@gmail.com" value="honmachifc@gmail.com">
+                                    <p class="field-desc mt-1" style="font-size: 0.75rem; color: var(--text-muted); line-height: 1.4;">
+                                        ※クリニックのアカウント（honmachifc@gmail.com）のカレンダーから本日の予定を自動で読み取ります。<br>
+                                        ※出勤時にスタッフへ今日の予定をアナウンスします。
+                                    </p>
+                                </div>
+                                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                                    <button id="btn-save-calendar-id" class="btn btn-primary" style="flex: 1;">カレンダーIDを保存</button>
+                                    <a href="https://calendar.google.com/calendar/embed?src=honmachifc%40gmail.com&ctz=Asia%2FTokyo" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="flex: 1; text-align: center; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 0.3rem;">
+                                        <i data-lucide="external-link" style="width: 14px; height: 14px;"></i> カレンダーを開く
+                                    </a>
+                                </div>
+                            </div>
+
                             <h3>ポイント手動調整</h3>
                             <form id="form-use-points" class="admin-form">
                                 <div class="form-group">
@@ -603,6 +634,30 @@
                     </button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- 本日の予定モーダル (出勤時ポップアップ ＆ バナー詳細用) -->
+    <div id="modal-today-events" class="modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <div class="calendar-modal-icon">
+                    <i data-lucide="calendar"></i>
+                </div>
+                <h3 id="calendar-modal-title">本日のクリニック予定</h3>
+                <p id="calendar-modal-subtitle" class="field-desc">おはようございます！本日のスケジュールを確認して今日も一日頑張りましょう。</p>
+            </div>
+            
+            <div id="calendar-events-list" class="calendar-events-list">
+                <!-- 予定一覧カードが動的に挿入されます -->
+            </div>
+
+            <div style="margin-top: 1.5rem;">
+                <button type="button" id="btn-close-calendar-modal" class="btn btn-primary btn-full" style="padding: 0.85rem; font-size: 1rem; font-weight: 700; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+                    <span>確認しました (今日も一日頑張ろう！)</span>
+                    <i data-lucide="check"></i>
+                </button>
+            </div>
         </div>
     </div>
 

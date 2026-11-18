@@ -250,9 +250,28 @@ document.addEventListener('DOMContentLoaded', () => {
         syncStatusText: document.getElementById('sync-status-text'),
         btnSyncNow: document.getElementById('btn-sync-now'),
 
+        // Calendar & Schedule Elements
+        todayCalendarBanner: document.getElementById('today-calendar-banner'),
+        calendarSummaryText: document.getElementById('calendar-summary-text'),
+        btnViewCalendar: document.getElementById('btn-view-calendar'),
+        modalTodayEvents: document.getElementById('modal-today-events'),
+        calendarModalTitle: document.getElementById('calendar-modal-title'),
+        calendarModalSubtitle: document.getElementById('calendar-modal-subtitle'),
+        calendarEventsList: document.getElementById('calendar-events-list'),
+        btnCloseCalendarModal: document.getElementById('btn-close-calendar-modal'),
+        inputCalendarId: document.getElementById('calendar-id'),
+        btnSaveCalendarId: document.getElementById('btn-save-calendar-id'),
+
         // Toast
         toastContainer: document.getElementById('toast-container')
     };
+
+    // Calendar Settings Default
+    if (!settings.calendarId) {
+        settings.calendarId = 'honmachifc@gmail.com';
+        store.set('settings', settings);
+    }
+    let todayEvents = store.get('today_events', []);
 
     // Helper to calculate billing period (16th of previous month to 15th of current month)
     function getDefaultBillingPeriod() {
@@ -416,6 +435,84 @@ document.addEventListener('DOMContentLoaded', () => {
         const theme = THEME_CYCLE[hash % THEME_CYCLE.length];
 
         return { en: enName, code: code, theme: theme };
+    }
+
+    // ==========================================================================
+    // Google Calendar Schedule Helpers & Modal
+    // ==========================================================================
+    function renderTodayCalendarBanner() {
+        if (!elements.todayCalendarBanner || !elements.calendarSummaryText) return;
+
+        if (!todayEvents || todayEvents.length === 0) {
+            elements.todayCalendarBanner.classList.remove('has-events');
+            elements.calendarSummaryText.textContent = '本日の予定はありません（平穏な1日になりますように✨）';
+            if (elements.btnViewCalendar) {
+                elements.btnViewCalendar.innerHTML = '詳細 <i data-lucide="chevron-right"></i>';
+            }
+        } else {
+            elements.todayCalendarBanner.classList.add('has-events');
+            const titles = todayEvents.slice(0, 3).map(ev => {
+                const time = ev.isAllDay ? '【終日】' : `【${ev.startTime || ''}】`;
+                return `${time}${ev.title}`;
+            }).join('　/　');
+            const more = todayEvents.length > 3 ? ` 他${todayEvents.length - 3}件` : '';
+            elements.calendarSummaryText.textContent = `${titles}${more}`;
+            if (elements.btnViewCalendar) {
+                elements.btnViewCalendar.innerHTML = `${todayEvents.length}件の予定 <i data-lucide="chevron-right"></i>`;
+            }
+        }
+        if (window.lucide) lucide.createIcons();
+    }
+
+    function showTodayEventsModal(staffName = null) {
+        if (!elements.modalTodayEvents) return;
+
+        if (staffName) {
+            const cleanName = staffName.split(/[\s　]+/)[0];
+            elements.calendarModalSubtitle.textContent = `${cleanName}さん、おはようございます！本日のクリニック予定をお知らせします。`;
+        } else {
+            elements.calendarModalSubtitle.textContent = '本日のクリニック予定スケジュール一覧です。';
+        }
+
+        if (!todayEvents || todayEvents.length === 0) {
+            elements.calendarEventsList.innerHTML = `
+                <div class="calendar-events-empty">
+                    <i data-lucide="calendar-check"></i>
+                    <p>本日の予定はありません。<br>今日も一日笑顔で頑張りましょう！</p>
+                </div>
+            `;
+        } else {
+            elements.calendarEventsList.innerHTML = todayEvents.map(ev => `
+                <div class="calendar-event-card ${ev.isAllDay ? 'allday-card' : ''}">
+                    <div class="calendar-event-header">
+                        <span class="calendar-time-tag">
+                            <i data-lucide="${ev.isAllDay ? 'sun' : 'clock'}" style="width:12px;height:12px;"></i>
+                            ${escapeHTML(ev.timeDisplay || (ev.isAllDay ? '終日' : '時間未定'))}
+                        </span>
+                    </div>
+                    <div class="calendar-event-title">${escapeHTML(ev.title)}</div>
+                    ${ev.location ? `
+                        <div class="calendar-event-meta">
+                            <span class="calendar-event-meta-item">
+                                <i data-lucide="map-pin"></i> ${escapeHTML(ev.location)}
+                            </span>
+                        </div>
+                    ` : ''}
+                    ${ev.description ? `
+                        <div class="calendar-event-desc">${escapeHTML(ev.description)}</div>
+                    ` : ''}
+                </div>
+            `).join('');
+        }
+
+        if (window.lucide) lucide.createIcons();
+        elements.modalTodayEvents.classList.add('active');
+    }
+
+    function closeTodayEventsModal() {
+        if (elements.modalTodayEvents) {
+            elements.modalTodayEvents.classList.remove('active');
+        }
     }
 
     // Render staff cards in the main screen
@@ -632,7 +729,7 @@ document.addEventListener('DOMContentLoaded', () => {
         '{name}さん、今日も大活躍でした！お風呂で温まってね〜！🛁'
     ];
 
-    function triggerMascotRun(staffName, type = 'checkin') {
+    function triggerMascotRun(staffName, type = 'checkin', eventHint = null) {
         const container = document.getElementById('mascot-runner-container');
         if (!container) return;
 
@@ -640,9 +737,21 @@ document.addEventListener('DOMContentLoaded', () => {
         container.innerHTML = '';
 
         const cleanName = staffName ? staffName.split(/[\s　]+/)[0] : '';
-        const messages = type === 'checkin' ? CHECKIN_MASCOT_MESSAGES : CHECKOUT_MASCOT_MESSAGES;
-        const template = messages[Math.floor(Math.random() * messages.length)];
-        const text = template.replace('{name}', cleanName);
+        let text = '';
+
+        if (type === 'checkin' && eventHint) {
+            const eventMessages = [
+                `{name}さん、おはよう！今日は『${eventHint}』があるよ！🐾`,
+                `{name}さん、おはようございます！今日は『${eventHint}』の予定だね✨`,
+                `{name}さん、出勤ナイス！今日は『${eventHint}』を要チェックだよ〜🩺`,
+                `おはよう！今日は『${eventHint}』があるから気をつけていこうね🐾`
+            ];
+            text = eventMessages[Math.floor(Math.random() * eventMessages.length)].replace('{name}', cleanName);
+        } else {
+            const messages = type === 'checkin' ? CHECKIN_MASCOT_MESSAGES : CHECKOUT_MASCOT_MESSAGES;
+            const template = messages[Math.floor(Math.random() * messages.length)];
+            text = template.replace('{name}', cleanName);
+        }
 
         const runner = document.createElement('div');
         runner.className = 'mascot-runner';
@@ -665,6 +774,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 runner.parentNode.removeChild(runner);
             }
         }, 4500);
+    }
+
+    // カレンダーバナー・モーダル開閉リスナー
+    if (elements.btnViewCalendar) {
+        elements.btnViewCalendar.addEventListener('click', () => {
+            showTodayEventsModal();
+        });
+    }
+    if (elements.btnCloseCalendarModal) {
+        elements.btnCloseCalendarModal.addEventListener('click', closeTodayEventsModal);
     }
 
     // 1. 出勤 (Check-in)
@@ -702,8 +821,16 @@ document.addEventListener('DOMContentLoaded', () => {
         syncWithGoogleSheets(true);
         showToast(`${staff.name}さん、おはようございます。出勤を記録しました。`, 'success');
 
-        // レッサーパンダ院長が走って応援！
-        triggerMascotRun(staff.name, 'checkin');
+        // 本日の予定がある場合は出勤時アラートモーダルを表示 & 院長が予定をアナウンス！
+        if (todayEvents && todayEvents.length > 0) {
+            showTodayEventsModal(staff.name);
+            const firstEv = todayEvents[0];
+            const eventHint = firstEv.isAllDay ? firstEv.title : `${firstEv.startTime} ${firstEv.title}`;
+            triggerMascotRun(staff.name, 'checkin', eventHint);
+        } else {
+            // レッサーパンダ院長が走って応援！
+            triggerMascotRun(staff.name, 'checkin');
+        }
     });
 
     // 2. 休憩 (Break Toggle: Start/End)
@@ -1143,7 +1270,8 @@ document.addEventListener('DOMContentLoaded', () => {
             records: records,
             pointLedger: pointLedger,
             pointLogs: pointLogs,
-            correctionRequests: correctionRequests
+            correctionRequests: correctionRequests,
+            calendarId: settings.calendarId || 'honmachifc@gmail.com'
         };
 
         const jsonStr = JSON.stringify(payload);
@@ -1286,6 +1414,13 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
+        // 4. Google Calendar Events マージ（本日のクリニック予定）
+        if (Array.isArray(cloudData.calendarEvents)) {
+            todayEvents = cloudData.calendarEvents;
+            store.set('today_events', todayEvents);
+            renderTodayCalendarBanner();
+        }
+
         if (hasChanges) {
             saveState();
             reconcileStaffStatusFromRecords();
@@ -1400,7 +1535,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 clearTimeout(timeoutId);
                 cleanup();
                 // フォールバック: 通常fetchを試みる
-                fetch(settings.gasUrl)
+                const fallbackCalId = encodeURIComponent(settings.calendarId || 'honmachifc@gmail.com');
+                const sepFallback = settings.gasUrl.includes('?') ? '&' : '?';
+                fetch(`${settings.gasUrl}${sepFallback}calendarId=${fallbackCalId}`)
                     .then(r => r.json())
                     .then(resp => {
                         if (resp && resp.success && resp.data) {
@@ -1418,7 +1555,8 @@ document.addEventListener('DOMContentLoaded', () => {
             };
 
             const sep = settings.gasUrl.includes('?') ? '&' : '?';
-            scriptEl.src = `${settings.gasUrl}${sep}callback=${callbackName}&_t=${Date.now()}`;
+            const calParam = encodeURIComponent(settings.calendarId || 'honmachifc@gmail.com');
+            scriptEl.src = `${settings.gasUrl}${sep}callback=${callbackName}&calendarId=${calParam}&_t=${Date.now()}`;
             document.body.appendChild(scriptEl);
         });
     }
@@ -2525,6 +2663,21 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Save Calendar Settings
+    if (elements.btnSaveCalendarId) {
+        elements.btnSaveCalendarId.addEventListener('click', () => {
+            const calId = (elements.inputCalendarId ? elements.inputCalendarId.value : '').trim();
+            if (!calId) {
+                showToast('カレンダーIDを入力してください。', 'warning');
+                return;
+            }
+            settings.calendarId = calId;
+            saveState();
+            showToast(`カレンダーID（${calId}）を保存しました。最新予定を取得します...`, 'success');
+            fetchCloudDataViaJsonp();
+        });
+    }
+
     if (elements.btnSyncNow) {
         elements.btnSyncNow.addEventListener('click', () => {
             fetchCloudDataViaJsonp().then(() => syncWithGoogleSheets(false));
@@ -2538,8 +2691,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
  
     function renderPointsView() {
-        // Show current GAS URL
+        // Show current GAS URL & Calendar ID
         elements.gasUrlInput.value = settings.gasUrl || '';
+        if (elements.inputCalendarId) {
+            elements.inputCalendarId.value = settings.calendarId || 'honmachifc@gmail.com';
+        }
 
         // Render Dropdown staff selection
         elements.selectPointStaff.innerHTML = '<option value="">スタッフを選択...</option>';
@@ -2607,6 +2763,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================================================
     reconcileStaffStatusFromRecords();
     renderStaffGrid();
+    renderTodayCalendarBanner();
     lucide.createIcons();
     elements.btnClosePanel.addEventListener('click', closeControlPanel);
 
