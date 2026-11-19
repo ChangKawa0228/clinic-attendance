@@ -1159,7 +1159,7 @@ body {
 }
 
 /* ==========================================================================
-   Modals (Authentication)
+   Modals (Authentication & Workflows)
    ========================================================================== */
 .modal {
     position: fixed;
@@ -1167,7 +1167,7 @@ body {
     left: 0;
     width: 100vw;
     height: 100vh;
-    background-color: rgba(15, 23, 42, 0.4);
+    background-color: rgba(15, 23, 42, 0.45);
     backdrop-filter: blur(8px);
     display: flex;
     align-items: center;
@@ -1176,6 +1176,9 @@ body {
     opacity: 0;
     pointer-events: none;
     transition: opacity var(--transition-normal);
+    overflow-y: auto;
+    padding: 1.5rem 1rem;
+    box-sizing: border-box;
 }
 
 .modal.active {
@@ -1185,15 +1188,34 @@ body {
 
 .modal-content {
     background: white;
-    padding: 2.5rem 2rem;
+    padding: 1.75rem 1.5rem;
     border-radius: var(--radius-lg);
     border: 1px solid var(--border-color);
     width: 100%;
-    max-width: 400px;
+    max-width: 480px;
+    max-height: calc(100vh - 3rem);
+    overflow-y: auto;
     position: relative;
-    box-shadow: var(--shadow-lg);
+    box-shadow: 0 20px 40px rgba(15, 23, 42, 0.22);
     transform: translateY(20px);
     transition: transform var(--transition-normal);
+    box-sizing: border-box;
+}
+
+/* モーダル内部のスクロールバーをスリムで綺麗に */
+.modal-content::-webkit-scrollbar {
+    width: 6px;
+}
+.modal-content::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 4px;
+}
+.modal-content::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+.modal-content::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
 }
 
 .modal.active .modal-content {
@@ -1337,6 +1359,23 @@ body {
 /* Peer Point Gift specific styles */
 #modal-peer-gift .modal-content {
     border-top: 6px solid var(--warning);
+    max-width: 480px;
+    padding: 1.5rem 1.4rem;
+}
+
+#modal-peer-gift .modal-header {
+    margin-bottom: 0.75rem;
+}
+
+#modal-peer-gift .lock-icon {
+    width: 2.5rem;
+    height: 2.5rem;
+    padding: 0.5rem;
+    margin: 0 auto 0.5rem auto;
+}
+
+#modal-peer-gift .modal-form .form-group {
+    margin-bottom: 0.65rem;
 }
 
 /* Excel Export specific styles */

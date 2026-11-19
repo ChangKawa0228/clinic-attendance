@@ -523,7 +523,7 @@
                     </div>
 
                     <!-- スタッフ割り振りリスト -->
-                    <div id="alloc-staff-list" class="alloc-list-container" style="max-height: 220px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 0.4rem; background: white; margin-bottom: 0.75rem;">
+                    <div id="alloc-staff-list" class="alloc-list-container" style="max-height: 150px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 0.4rem; background: white; margin-bottom: 0.75rem;">
                         <!-- JSで動的にスタッフ一覧と +/- コントロールを描画 -->
                     </div>
                 </div>
@@ -533,9 +533,9 @@
                     <input type="text" id="gift-message" class="form-control" placeholder="例: 今日はフォローありがとうございました！">
                 </div>
                 
-                <div style="display: flex; gap: 0.75rem; margin-top: 1rem;">
-                    <button type="button" id="btn-skip-gift" class="btn btn-secondary" style="flex: 1;">スキップ (贈らない)</button>
-                    <button type="submit" id="btn-submit-gift" class="btn btn-primary" style="flex: 2;">ポイントを贈って退勤</button>
+                <div class="peer-gift-footer" style="display: flex; gap: 0.75rem; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border-color); position: sticky; bottom: -1.5rem; background: white; padding-bottom: 0.5rem; z-index: 10;">
+                    <button type="button" id="btn-skip-gift" class="btn btn-secondary" style="flex: 1; padding: 0.75rem 0.5rem; font-size: 0.9rem;">スキップ (贈らない)</button>
+                    <button type="submit" id="btn-submit-gift" class="btn btn-primary" style="flex: 2; padding: 0.75rem; font-size: 0.95rem; font-weight: 700;">ポイントを贈って退勤</button>
                 </div>
             </form>
         </div>
