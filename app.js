@@ -377,7 +377,7 @@ document.addEventListener('DOMContentLoaded', () => {
         '河合 朋子': { en: 'T. KAWAI', code: 'TK', theme: 'theme-teal' },
         '千葉 幸夫': { en: 'Y. CHIBA', code: 'YC', theme: 'theme-indigo' },
         '尾崎 昭太': { en: 'S. OSAKI', code: 'SO', theme: 'theme-amber' },
-        '木村 哲子': { en: 'T. KIMURA', code: 'TK', theme: 'theme-emerald' },
+        '木村 哲子': { en: 'S. KIMURA', code: 'SK', theme: 'theme-emerald' },
         '末廣 綾乃': { en: 'A. SUEHIRO', code: 'AS', theme: 'theme-rose' },
         '北口 愛美': { en: 'M. KITAGUCHI', code: 'MK', theme: 'theme-cyan' },
         '寺西 真名美': { en: 'M. TERANISHI', code: 'MT', theme: 'theme-purple' },
