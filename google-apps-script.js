@@ -64,26 +64,52 @@ function parseJson(str) {
 }
 
 function loadAllData(ss, calendarId) {
+  var calData = getTodayCalendarEvents(calendarId);
   return {
     records: loadRecords(ss),
     pointLedger: loadPointLedger(ss),
     pointLogs: loadPointLogs(ss),
     correctionRequests: loadRequests(ss),
-    calendarEvents: getTodayCalendarEvents(calendarId)
+    calendarEvents: calData.events,
+    calendarStatus: calData.status
   };
 }
 
 function getTodayCalendarEvents(calendarId) {
   var targetId = calendarId || "honmachifc@gmail.com";
+  var debugStatus = {
+    targetId: targetId,
+    foundTargetCal: false,
+    usedDefaultCal: false,
+    eventCount: 0,
+    error: null
+  };
+
   try {
     var cal = CalendarApp.getCalendarById(targetId);
-    if (!cal) {
+    if (cal) {
+      debugStatus.foundTargetCal = true;
+    } else {
+      // ターゲットカレンダーが見つからない場合はデフォルトを試みる
       cal = CalendarApp.getDefaultCalendar();
+      if (cal) {
+        debugStatus.usedDefaultCal = true;
+      }
     }
-    if (!cal) return [];
 
+    if (!cal) {
+      debugStatus.error = "カレンダーにアクセスできませんでした。Googleアカウントの共有設定をご確認ください。";
+      return { events: [], status: debugStatus };
+    }
+
+    // 本日の 00:00:00 〜 23:59:59 までの範囲でイベントを取得
     var now = new Date();
-    var events = cal.getEventsForDay(now);
+    var startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+    var endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+
+    var events = cal.getEvents(startOfDay, endOfDay);
+    debugStatus.eventCount = events.length;
+
     var result = [];
 
     for (var i = 0; i < events.length; i++) {
@@ -113,9 +139,10 @@ function getTodayCalendarEvents(calendarId) {
       });
     }
 
-    return result;
+    return { events: result, status: debugStatus };
   } catch (err) {
-    return [];
+    debugStatus.error = err.toString();
+    return { events: [], status: debugStatus };
   }
 }
 

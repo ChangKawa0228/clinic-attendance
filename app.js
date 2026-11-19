@@ -272,6 +272,7 @@ document.addEventListener('DOMContentLoaded', () => {
         store.set('settings', settings);
     }
     let todayEvents = store.get('today_events', []);
+    let calendarSyncStatus = store.get('calendar_sync_status', null);
 
     // Helper to calculate billing period (16th of previous month to 15th of current month)
     function getDefaultBillingPeriod() {
@@ -475,10 +476,22 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (!todayEvents || todayEvents.length === 0) {
+            let guideMsg = '';
+            if (calendarSyncStatus && !calendarSyncStatus.foundTargetCal) {
+                guideMsg = `
+                    <div style="margin-top: 0.8rem; padding: 0.6rem 0.8rem; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 8px; font-size: 0.78rem; color: #c2410c; text-align: left; line-height: 1.5;">
+                        <i data-lucide="info" style="width: 14px; height: 14px; vertical-align: -2px; margin-right: 4px;"></i>
+                        <strong>クリニックカレンダー連携のご案内:</strong><br>
+                        クリニック側（honmachifc@gmail.com）のGoogleカレンダーで、個人アカウントへの共有（すべての予定の詳細の閲覧）を行ってください。
+                    </div>
+                `;
+            }
+
             elements.calendarEventsList.innerHTML = `
                 <div class="calendar-events-empty">
                     <i data-lucide="calendar-check"></i>
                     <p>本日の予定はありません。<br>今日も一日笑顔で頑張りましょう！</p>
+                    ${guideMsg}
                 </div>
             `;
         } else {
@@ -763,11 +776,41 @@ document.addEventListener('DOMContentLoaded', () => {
         let bodyHtml = '';
 
         if (type === 'checkin' && eventHint) {
-            headerTitle = '<i data-lucide="bell" style="width:13px;height:13px;margin-right:3px;"></i> 院長からの本日の連絡';
+            let eventsArray = Array.isArray(eventHint) ? eventHint : [];
+            headerTitle = `<i data-lucide="bell" style="width:13px;height:13px;margin-right:3px;"></i> 院長からの本日の連絡 (${eventsArray.length > 0 ? eventsArray.length + '件' : '予定あり'})`;
+            
+            let listMarkup = '';
+            if (eventsArray.length > 0) {
+                const displayItems = eventsArray.slice(0, 4);
+                const itemsHtml = displayItems.map(ev => {
+                    const timeTag = ev.isAllDay ? '【終日】' : `【${ev.startTime}】`;
+                    return `<li style="display: flex; gap: 0.35rem; align-items: baseline; margin-bottom: 0.25rem;">
+                        <span style="font-weight: 700; color: #ea580c; white-space: nowrap; font-size: 0.82rem;">${timeTag}</span>
+                        <span style="color: #0f172a; word-break: break-all;">${escapeHTML(ev.title)}</span>
+                    </li>`;
+                }).join('');
+
+                const moreText = eventsArray.length > 4 
+                    ? `<div style="font-size: 0.78rem; color: #ea580c; margin-top: 0.3rem; text-align: right; font-weight: 600;">他 ${eventsArray.length - 4} 件（タップで全件表示）</div>`
+                    : `<div style="font-size: 0.75rem; color: #64748b; margin-top: 0.3rem; text-align: right;">※タップで場所・詳細を表示</div>`;
+
+                listMarkup = `
+                    <ul style="list-style: none; padding: 0; margin: 0; font-size: 0.85rem; line-height: 1.45;">
+                        ${itemsHtml}
+                    </ul>
+                    ${moreText}
+                `;
+            } else {
+                listMarkup = `<div><strong>本日の予定:</strong> ${escapeHTML(String(eventHint))}</div>`;
+            }
+
             bodyHtml = `
-                <div><strong>${escapeHTML(cleanName)}さん</strong>、おはようございます！今日もよろしくお願いします✨</div>
+                <div style="margin-bottom: 0.45rem;"><strong>${escapeHTML(cleanName)}さん</strong>、おはようございます！今日もよろしくお願いします✨</div>
                 <div class="mascot-bubble-event-highlight">
-                    <i data-lucide="calendar"></i> <strong>本日の予定:</strong> ${escapeHTML(eventHint)}
+                    <div style="font-weight: 700; font-size: 0.82rem; margin-bottom: 0.35rem; display: flex; align-items: center; gap: 0.3rem; color: #c2410c;">
+                        <i data-lucide="calendar"></i> 本日の予定スケジュール:
+                    </div>
+                    ${listMarkup}
                 </div>
             `;
         } else if (type === 'checkin') {
@@ -874,14 +917,9 @@ document.addEventListener('DOMContentLoaded', () => {
         syncWithGoogleSheets(true);
         showToast(`${staff.name}さん、おはようございます。出勤を記録しました。`, 'success');
 
-        // 本日の予定がある場合は院長が右下から登場して20秒間アナウンス！
+        // 本日の予定がある場合は院長が右下から登場して20秒間アナウンス（箇条書き一覧付き）！
         if (todayEvents && todayEvents.length > 0) {
-            const firstEv = todayEvents[0];
-            let hint = firstEv.isAllDay ? firstEv.title : `${firstEv.startTime} ${firstEv.title}`;
-            if (todayEvents.length > 1) {
-                hint += ` (他${todayEvents.length - 1}件あり)`;
-            }
-            triggerMascotRun(staff.name, 'checkin', hint);
+            triggerMascotRun(staff.name, 'checkin', todayEvents);
         } else {
             // レッサーパンダ院長が応援メッセージ！
             triggerMascotRun(staff.name, 'checkin');
@@ -1474,6 +1512,10 @@ document.addEventListener('DOMContentLoaded', () => {
             todayEvents = cloudData.calendarEvents;
             store.set('today_events', todayEvents);
             renderTodayCalendarBanner();
+        }
+        if (cloudData.calendarStatus) {
+            calendarSyncStatus = cloudData.calendarStatus;
+            store.set('calendar_sync_status', calendarSyncStatus);
         }
 
         if (hasChanges) {
