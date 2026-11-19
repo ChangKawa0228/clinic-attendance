@@ -1,3 +1,10 @@
+// 初回カレンダー権限承認用テスト関数（GASエディタで「testCalendar」を選んで「▶ 実行」を押すと承認画面が出ます）
+function testCalendar() {
+  var res = getTodayCalendarEvents("honmachifc@gmail.com");
+  Logger.log("イベント取得件数: " + res.events.length);
+  Logger.log(JSON.stringify(res));
+}
+
 function doGet(e) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var calendarId = (e && e.parameter && e.parameter.calendarId) ? e.parameter.calendarId : "honmachifc@gmail.com";
