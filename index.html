@@ -462,7 +462,8 @@
 
     <!-- Peer Point Gift Modal -->
     <div id="modal-peer-gift" class="modal">
-        <div class="modal-content" style="max-width: 520px;">
+        <div class="modal-content" style="max-width: 520px; position: relative;">
+            <button type="button" id="btn-close-peer-gift" class="btn-close" title="閉じる"><i data-lucide="x"></i></button>
             <div class="modal-header">
                 <i data-lucide="gift" class="lock-icon" style="background: var(--warning-light); color: var(--warning); margin: 0 auto 1rem auto; display: block; width: 3rem; height: 3rem; border-radius: 50%; padding: 0.6rem;"></i>
                 <h3>お疲れ様でした！</h3>
@@ -488,6 +489,9 @@
                         <option value="その他">その他（下記に入力）</option>
                     </select>
                     <input type="text" id="overtime-reason-detail" class="form-control hidden" placeholder="具体的な理由を入力してください">
+                    <p id="overtime-error-msg" class="error-text hidden" style="color: #dc2626; font-size: 0.82rem; font-weight: 700; margin-top: 0.35rem; display: flex; align-items: center; gap: 0.3rem;">
+                        <i data-lucide="alert-triangle" style="width: 14px; height: 14px;"></i> 残業理由を選択してください
+                    </p>
                 </div>
 
                 <!-- ポイント割り振りセクション (ポイント獲得時のみ表示) -->

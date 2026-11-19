@@ -209,6 +209,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Peer Gift Modal (Allocation)
         modalPeerGift: document.getElementById('modal-peer-gift'),
+        btnClosePeerGift: document.getElementById('btn-close-peer-gift'),
         peerGiftMessage: document.getElementById('peer-gift-message'),
         formPeerGift: document.getElementById('form-peer-gift'),
         pointAllocationSection: document.getElementById('point-allocation-section'),
@@ -225,6 +226,7 @@ document.addEventListener('DOMContentLoaded', () => {
         overtimeReasonSection: document.getElementById('overtime-reason-section'),
         selectOvertimeReason: document.getElementById('select-overtime-reason'),
         overtimeReasonDetail: document.getElementById('overtime-reason-detail'),
+        overtimeErrorMsg: document.getElementById('overtime-error-msg'),
         
         // Correction Request (Staff)
         btnOpenCorrectionModal: document.getElementById('btn-open-correction-modal'),
@@ -1042,11 +1044,17 @@ document.addEventListener('DOMContentLoaded', () => {
             if (isOvertime) {
                 elements.overtimeReasonSection.classList.remove('hidden');
                 elements.selectOvertimeReason.value = '';
+                elements.selectOvertimeReason.style.borderColor = '#f59e0b';
                 elements.overtimeReasonDetail.value = '';
                 elements.overtimeReasonDetail.classList.add('hidden');
+                elements.overtimeReasonDetail.required = false;
+                if (elements.overtimeErrorMsg) elements.overtimeErrorMsg.classList.add('hidden');
             } else {
                 elements.overtimeReasonSection.classList.add('hidden');
                 elements.selectOvertimeReason.value = '';
+                elements.overtimeReasonDetail.value = '';
+                elements.overtimeReasonDetail.required = false;
+                if (elements.overtimeErrorMsg) elements.overtimeErrorMsg.classList.add('hidden');
             }
 
             // Populate peer gift allocation
@@ -1079,14 +1087,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Toggle overtime detail input when 'その他' is chosen
     elements.selectOvertimeReason.addEventListener('change', () => {
+        if (elements.overtimeErrorMsg) elements.overtimeErrorMsg.classList.add('hidden');
+        elements.selectOvertimeReason.style.borderColor = '#f59e0b';
         if (elements.selectOvertimeReason.value === 'その他') {
             elements.overtimeReasonDetail.classList.remove('hidden');
-            elements.overtimeReasonDetail.required = true;
             elements.overtimeReasonDetail.focus();
         } else {
             elements.overtimeReasonDetail.classList.add('hidden');
-            elements.overtimeReasonDetail.required = false;
         }
+        elements.overtimeReasonDetail.required = false;
     });
 
     // ==========================================================================
@@ -1200,38 +1209,84 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Skip peer gift
-    if (elements.btnSkipGift) {
-        elements.btnSkipGift.addEventListener('click', () => {
-            for (const id in currentAllocations) {
-                currentAllocations[id] = 0;
+    // Close peer gift modal (キャンセルして出勤状態に戻す)
+    if (elements.btnClosePeerGift) {
+        elements.btnClosePeerGift.addEventListener('click', () => {
+            if (pendingCheckout) {
+                const { staff, record } = pendingCheckout;
+                staff.status = 'online';
+                record.checkout = null;
+                saveState();
+                renderStaffGrid();
+                updateControlPanelState(staff);
             }
-            executeCheckoutFinish();
+            elements.modalPeerGift.classList.remove('active');
+            pendingCheckout = null;
+            currentAllocations = {};
+            showToast('退勤処理をキャンセルしました。', 'info');
         });
     }
 
-    // Handle peer gift submit
+    // Skip peer gift (ポイント配分をスキップして退勤)
+    if (elements.btnSkipGift) {
+        elements.btnSkipGift.addEventListener('click', (e) => {
+            e.preventDefault();
+            for (const id in currentAllocations) {
+                currentAllocations[id] = 0;
+            }
+            executeCheckoutFinish(true);
+        });
+    }
+
+    // Handle peer gift submit (ボタンクリックとフォーム送信の両方で確実に発火)
+    if (elements.btnSubmitGift) {
+        elements.btnSubmitGift.addEventListener('click', (e) => {
+            e.preventDefault();
+            executeCheckoutFinish(false);
+        });
+    }
+
     elements.formPeerGift.addEventListener('submit', (e) => {
         e.preventDefault();
-        executeCheckoutFinish();
+        executeCheckoutFinish(false);
     });
 
-    function executeCheckoutFinish() {
-        if (!pendingCheckout) return;
+    function executeCheckoutFinish(isSkip = false) {
+        if (!pendingCheckout) {
+            elements.modalPeerGift.classList.remove('active');
+            return;
+        }
 
         const { staff, record, pointsEarned, isOvertime } = pendingCheckout;
         const msg = elements.giftMessage ? elements.giftMessage.value.trim() : '';
 
         // Overtime reason handling
         if (isOvertime) {
-            let reasonVal = elements.selectOvertimeReason.value;
+            let reasonVal = elements.selectOvertimeReason ? elements.selectOvertimeReason.value : '';
             if (!reasonVal) {
-                showToast('残業理由を選択してください。', 'warning');
-                return;
-            }
-            if (reasonVal === 'その他') {
-                const detail = elements.overtimeReasonDetail.value.trim();
+                if (isSkip) {
+                    // スキップで退勤した場合は自動でデフォルト理由を補完して退勤を妨げない
+                    reasonVal = '急患・診療対応の延長';
+                } else {
+                    if (elements.overtimeErrorMsg) elements.overtimeErrorMsg.classList.remove('hidden');
+                    if (elements.selectOvertimeReason) {
+                        elements.selectOvertimeReason.style.borderColor = '#dc2626';
+                        elements.selectOvertimeReason.focus();
+                    }
+                    showToast('残業理由を選択してください（画面上部の黄色い枠）。', 'warning');
+                    return;
+                }
+            } else if (reasonVal === 'その他') {
+                const detail = elements.overtimeReasonDetail ? elements.overtimeReasonDetail.value.trim() : '';
                 if (!detail) {
+                    if (elements.overtimeErrorMsg) {
+                        elements.overtimeErrorMsg.textContent = '具体的な残業理由を入力してください';
+                        elements.overtimeErrorMsg.classList.remove('hidden');
+                    }
+                    if (elements.overtimeReasonDetail) {
+                        elements.overtimeReasonDetail.style.borderColor = '#dc2626';
+                        elements.overtimeReasonDetail.focus();
+                    }
                     showToast('具体的な残業理由を入力してください。', 'warning');
                     return;
                 }
@@ -1240,74 +1295,84 @@ document.addEventListener('DOMContentLoaded', () => {
             record.overtimeReason = reasonVal;
         }
 
-        // Process point allocations
-        const allocatedPeers = [];
-        let totalGiftPoints = 0;
+        try {
+            // Process point allocations
+            const allocatedPeers = [];
+            let totalGiftPoints = 0;
 
-        for (const receiverId in currentAllocations) {
-            const pts = currentAllocations[receiverId];
-            if (pts > 0) {
-                const receiver = staffs.find(s => s.id === receiverId);
-                if (receiver) {
-                    totalGiftPoints += pts;
-                    allocatedPeers.push(`${receiver.name}(${pts}pt)`);
+            for (const receiverId in currentAllocations) {
+                const pts = currentAllocations[receiverId];
+                if (pts > 0) {
+                    const receiver = staffs.find(s => s.id === receiverId);
+                    if (receiver) {
+                        totalGiftPoints += pts;
+                        allocatedPeers.push(`${receiver.name}(${pts}pt)`);
 
-                    if (!pointLedger[receiver.id]) {
-                        pointLedger[receiver.id] = { current: 0, lifetime: 0 };
+                        if (!pointLedger[receiver.id]) {
+                            pointLedger[receiver.id] = { current: 0, lifetime: 0 };
+                        }
+                        pointLedger[receiver.id].current += pts;
+                        pointLedger[receiver.id].lifetime += pts;
+
+                        pointLogs.unshift({
+                            id: `pt-${Date.now()}-${receiver.id}`,
+                            timestamp: new Date().toISOString(),
+                            staffId: receiver.id,
+                            staffName: receiver.name,
+                            action: 'earn',
+                            points: pts,
+                            reason: `${staff.name}さんからの感謝ポイント: ${msg || '日頃のサポートに感謝！'}`
+                        });
                     }
-                    pointLedger[receiver.id].current += pts;
-                    pointLedger[receiver.id].lifetime += pts;
-
-                    pointLogs.unshift({
-                        id: `pt-${Date.now()}-${receiver.id}`,
-                        timestamp: new Date().toISOString(),
-                        staffId: receiver.id,
-                        staffName: receiver.name,
-                        action: 'earn',
-                        points: pts,
-                        reason: `${staff.name}さんからの感謝ポイント: ${msg || '日頃のサポートに感謝！'}`
-                    });
                 }
             }
-        }
 
-        // 余りポイントは自分の残高にストック
-        const leftover = pointsEarned - totalGiftPoints;
-        if (leftover > 0) {
-            if (!pointLedger[staff.id]) {
-                pointLedger[staff.id] = { current: 0, lifetime: 0 };
+            // 余りポイントは自分の残高にストック
+            const leftover = pointsEarned - totalGiftPoints;
+            if (leftover > 0) {
+                if (!pointLedger[staff.id]) {
+                    pointLedger[staff.id] = { current: 0, lifetime: 0 };
+                }
+                pointLedger[staff.id].current += leftover;
+                pointLedger[staff.id].lifetime += leftover;
             }
-            pointLedger[staff.id].current += leftover;
-            pointLedger[staff.id].lifetime += leftover;
+
+            if (totalGiftPoints > 0) {
+                record.peerReceiverName = allocatedPeers.join(', ');
+                record.peerPoints = totalGiftPoints;
+            } else {
+                record.peerReceiverName = null;
+                record.peerPoints = 0;
+            }
+
+            // Save state and update UI
+            saveState();
+            reconcileStaffStatusFromRecords();
+            syncWithGoogleSheets(true);
+
+            // Close modal and reset
+            elements.modalPeerGift.classList.remove('active');
+            if (elements.giftMessage) elements.giftMessage.value = '';
+            currentAllocations = {};
+            pendingCheckout = null;
+
+            if (totalGiftPoints > 0) {
+                showToast(`${staff.name}さんの退勤を記録し、${record.peerReceiverName}へ感謝ポイントを配分しました！${record.overtimeReason ? ' (残業理由を記録済)' : ''}`, 'success');
+            } else {
+                showToast(`${staff.name}さんの退勤を記録しました。${record.overtimeReason ? ' (残業理由を記録済)' : ''}`, 'success');
+            }
+
+            // レッサーパンダ院長が走ってお疲れ様を伝える！
+            triggerMascotRun(staff.name, 'checkout');
+        } catch (err) {
+            console.error('Checkout execution error:', err);
+            // エラー時も確実にモーダルを閉じて退勤状態を担保
+            elements.modalPeerGift.classList.remove('active');
+            pendingCheckout = null;
+            saveState();
+            reconcileStaffStatusFromRecords();
+            showToast(`${staff.name}さんの退勤を記録しました。`, 'success');
         }
-
-        if (totalGiftPoints > 0) {
-            record.peerReceiverName = allocatedPeers.join(', ');
-            record.peerPoints = totalGiftPoints;
-        } else {
-            record.peerReceiverName = null;
-            record.peerPoints = 0;
-        }
-
-        // Save state and update UI
-        saveState();
-        reconcileStaffStatusFromRecords();
-        syncWithGoogleSheets(true);
-
-        // Close modal and reset
-        elements.modalPeerGift.classList.remove('active');
-        if (elements.giftMessage) elements.giftMessage.value = '';
-        currentAllocations = {};
-        pendingCheckout = null;
-
-        if (totalGiftPoints > 0) {
-            showToast(`${staff.name}さんの退勤を記録し、${record.peerReceiverName}へ感謝ポイントを配分しました！${record.overtimeReason ? ' (残業理由を記録済)' : ''}`, 'success');
-        } else {
-            showToast(`${staff.name}さんの退勤を記録しました。${record.overtimeReason ? ' (残業理由を記録済)' : ''}`, 'success');
-        }
-
-        // レッサーパンダ院長が走ってお疲れ様を伝える！
-        triggerMascotRun(staff.name, 'checkout');
     }
 
     function parseTimeToDate(dateStr, timeStr) {
