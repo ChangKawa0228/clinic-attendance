@@ -718,11 +718,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const today = getTodayString();
         const staff = staffs.find(s => s.id === staffId);
         const staffCleanName = staff?.name ? staff.name.replace(/\s+/g, '') : '';
-        return records.find(r => {
+        const todayRecs = records.filter(r => {
             const recCleanName = r.staffName ? r.staffName.replace(/\s+/g, '') : '';
             const isMatch = (r.staffId === staffId) || (staffCleanName && recCleanName === staffCleanName);
             return isMatch && normalizeDateStr(r.date) === today;
         });
+        if (todayRecs.length === 0) return null;
+        // 未退勤（checkinがありcheckoutがない）シフトを最優先、無ければ最新の打刻を返す
+        return todayRecs.find(r => r.checkin && !r.checkout) || todayRecs[0];
     }
 
     // ==========================================================================
