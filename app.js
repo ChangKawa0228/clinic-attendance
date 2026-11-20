@@ -1039,6 +1039,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const isLate = (nowHour > 18) || (nowHour === 18 && nowMin >= 30);
         const isOvertime = workMinutes >= 480 || isLate;
 
+        // ★最重要セーフティネット: 退勤打刻をこの瞬間に即座に保存・クラウド送信！
+        // モーダルを閉じられたりブラウザを終了されても、退勤打刻自体は絶対に失われないように先行確定
+        saveState();
+        reconcileStaffStatusFromRecords();
+        closeControlPanel();
+        syncWithGoogleSheets(true);
+
         // If earned points OR overtime, open modal to input gift and/or overtime reason
         if (pointsEarned > 0 || isOvertime) {
             pendingCheckout = { staff, record, pointsEarned, isOvertime };
@@ -1075,14 +1082,9 @@ document.addEventListener('DOMContentLoaded', () => {
             // Show modal
             elements.modalPeerGift.classList.add('active');
             if (window.lucide) window.lucide.createIcons();
-            closeControlPanel();
             renderStaffGrid();
         } else {
             // Instant checkout with no points and no overtime
-            saveState();
-            reconcileStaffStatusFromRecords();
-            closeControlPanel();
-            syncWithGoogleSheets(true);
             showToast(`${staff.name}さん、お疲れ様でした。退勤を記録しました。(勤務時間: ${(workMinutes/60).toFixed(1)}時間)`, 'success');
             triggerMascotRun(staff.name, 'checkout');
         }
@@ -1212,21 +1214,16 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Close peer gift modal (キャンセルして出勤状態に戻す)
+    // Close peer gift modal (×ボタンで閉じた場合も退勤自体は完了させ、ポイント配分のみスキップ)
     if (elements.btnClosePeerGift) {
         elements.btnClosePeerGift.addEventListener('click', () => {
             if (pendingCheckout) {
-                const { staff, record } = pendingCheckout;
-                staff.status = 'online';
-                record.checkout = null;
-                saveState();
-                renderStaffGrid();
-                updateControlPanelState(staff);
+                // 退勤打刻は維持したまま、ポイント配分をスキップして完了
+                executeCheckoutFinish(true);
+                showToast('退勤を記録しました（ポイント配分はスキップされました）。', 'info');
+            } else {
+                elements.modalPeerGift.classList.remove('active');
             }
-            elements.modalPeerGift.classList.remove('active');
-            pendingCheckout = null;
-            currentAllocations = {};
-            showToast('退勤処理をキャンセルしました。', 'info');
         });
     }
 
