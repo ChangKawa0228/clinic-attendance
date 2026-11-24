@@ -100,21 +100,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // 末尾に HELP Ns. 1, HELP Ns. 2, HELP St. 1, HELP St. 2 がなければ追加
-    const requiredHelpStaffs = [
-        { id: 'st-help-ns1', name: 'HELP Ns. 1', color: 'hsl(175, 75%, 40%)' },
-        { id: 'st-help-ns2', name: 'HELP Ns. 2', color: 'hsl(175, 75%, 40%)' },
-        { id: 'st-help-st1', name: 'HELP St. 1', color: 'hsl(215, 60%, 45%)' },
-        { id: 'st-help-st2', name: 'HELP St. 2', color: 'hsl(215, 60%, 45%)' }
-    ];
-
-    requiredHelpStaffs.forEach(h => {
-        if (!staffs.some(s => s.name === h.name)) {
+    // ★全PC完全同期: DEFAULT_STAFFS（千原由佳菜さんやヘルプスタッフ等）で未登録のスタッフがいれば確実に自動マージ追加
+    DEFAULT_STAFFS.forEach(defStaff => {
+        const cleanDef = defStaff.name.replace(/\s+/g, '');
+        const exists = staffs.some(s => s.id === defStaff.id || (s.name && s.name.replace(/\s+/g, '') === cleanDef));
+        if (!exists) {
             staffs.push({
-                id: h.id,
-                name: h.name,
+                id: defStaff.id,
+                name: defStaff.name,
                 status: 'offline',
-                avatarColor: h.color
+                avatarColor: defStaff.avatarColor
             });
             staffMigrationNeeded = true;
         }
