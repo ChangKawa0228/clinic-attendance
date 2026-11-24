@@ -201,7 +201,17 @@ document.addEventListener('DOMContentLoaded', () => {
         // Admin: Staff management
         formAddStaff: document.getElementById('form-add-staff'),
         newStaffName: document.getElementById('new-staff-name'),
+        newStaffEn: document.getElementById('new-staff-en'),
         adminStaffTableBody: document.getElementById('admin-staff-table-body'),
+        modalEditStaff: document.getElementById('modal-edit-staff'),
+        btnCloseEditStaff: document.getElementById('btn-close-edit-staff'),
+        btnCancelEditStaff: document.getElementById('btn-cancel-edit-staff'),
+        formEditStaff: document.getElementById('form-edit-staff'),
+        editStaffId: document.getElementById('edit-staff-id'),
+        editStaffName: document.getElementById('edit-staff-name'),
+        editStaffEn: document.getElementById('edit-staff-en'),
+        editStaffCode: document.getElementById('edit-staff-code'),
+        editStaffSub: document.getElementById('edit-staff-sub'),
         
         // Admin: Points
         pointRateInput: document.getElementById('point-rate'),
@@ -613,7 +623,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
                 <div class="staff-card-en-name">${escapeHTML(profile.en)}</div>
                 <div class="staff-card-jp-name ${shiftInfo ? 'shift-highlight' : ''}">${escapeHTML(profile.sub || staff.name)}</div>
-                <div class="status-badge ${statusBadgeClass}">${statusText}</div>
             `;
 
             card.addEventListener('click', () => selectStaff(staff.id));
@@ -2863,6 +2872,15 @@ document.addEventListener('DOMContentLoaded', () => {
             avatarColor: color
         };
 
+        const en = elements.newStaffEn ? elements.newStaffEn.value.trim() : '';
+        if (en) {
+            KNOWN_STAFF_PROFILES[name] = {
+                en: en,
+                code: en.replace(/[^A-Za-z]/g, '').substring(0, 2).toUpperCase() || 'ST',
+                theme: THEME_CYCLE[Math.floor(Math.random() * THEME_CYCLE.length)]
+            };
+        }
+
         staffs.push(newStaff);
         
         // Initialize points ledger
@@ -2870,39 +2888,107 @@ document.addEventListener('DOMContentLoaded', () => {
 
         saveState();
         renderAdminStaffTable();
+        renderStaffGrid();
         elements.newStaffName.value = '';
+        if (elements.newStaffEn) elements.newStaffEn.value = '';
         showToast(`${name}さんをスタッフとして登録しました。`, 'success');
     });
 
     function renderAdminStaffTable() {
         elements.adminStaffTableBody.innerHTML = '';
         
-        staffs.forEach(staff => {
+        staffs.forEach((staff, index) => {
             const tr = document.createElement('tr');
+            const profile = getStaffDisplayProfile(staff);
             
-            // Build state text
-            let stateBadge = `<span class="status-badge status-offline">未出勤</span>`;
+            // 状態表示: 出勤中（緑）/ 休憩中（オレンジ）/ 未出勤・退勤（ピンク）
+            let stateBadge = `<span style="display: inline-block; padding: 2px 8px; font-size: 0.72rem; font-weight: 700; border-radius: 999px; background: #fff1f2; color: #e11d48; border: 1px solid #fecdd3;">退勤</span>`;
             if (staff.status === 'online') {
-                stateBadge = `<span class="status-badge status-online">勤務中</span>`;
+                stateBadge = `<span style="display: inline-block; padding: 2px 8px; font-size: 0.72rem; font-weight: 700; border-radius: 999px; background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0;">出勤中</span>`;
             } else if (staff.status === 'break') {
-                stateBadge = `<span class="status-badge status-break">休憩中</span>`;
+                stateBadge = `<span style="display: inline-block; padding: 2px 8px; font-size: 0.72rem; font-weight: 700; border-radius: 999px; background: #fffbeb; color: #d97706; border: 1px solid #fde68a;">休憩中</span>`;
             }
 
+            const isFirst = index === 0;
+            const isLast = index === staffs.length - 1;
+
             tr.innerHTML = `
-                <td style="font-weight: 600;">${escapeHTML(staff.name)}</td>
-                <td>${stateBadge}</td>
+                <td style="text-align: center;">
+                    <div style="display: flex; gap: 4px; justify-content: center;">
+                        <button type="button" class="btn btn-secondary btn-move-staff" data-index="${index}" data-dir="-1" ${isFirst ? 'disabled style="opacity:0.25; cursor:not-allowed;"' : ''} title="上へ移動" style="padding: 3px 6px; font-size: 0.75rem;">
+                            <i data-lucide="chevron-up" style="width: 14px; height: 14px;"></i>
+                        </button>
+                        <button type="button" class="btn btn-secondary btn-move-staff" data-index="${index}" data-dir="1" ${isLast ? 'disabled style="opacity:0.25; cursor:not-allowed;"' : ''} title="下へ移動" style="padding: 3px 6px; font-size: 0.75rem;">
+                            <i data-lucide="chevron-down" style="width: 14px; height: 14px;"></i>
+                        </button>
+                    </div>
+                </td>
                 <td>
-                    <button class="btn btn-secondary btn-danger btn-delete-staff" data-id="${staff.id}">
-                        <i data-lucide="trash-2" style="width: 16px; height: 16px;"></i> 削除
-                    </button>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <div class="staff-card-avatar ${profile.theme}" style="width: 2.1rem; height: 2.1rem; font-size: 0.75rem; flex-shrink: 0;">
+                            <span>${escapeHTML(profile.code)}</span>
+                        </div>
+                        <div>
+                            <div style="font-weight: 700; font-size: 0.9rem; color: #0f172a;">${escapeHTML(staff.name)}</div>
+                            <div style="font-size: 0.75rem; color: #64748b; font-family: 'Plus Jakarta Sans', sans-serif;">${escapeHTML(profile.en)}</div>
+                        </div>
+                    </div>
+                </td>
+                <td style="text-align: center;">${stateBadge}</td>
+                <td style="text-align: center;">
+                    <div style="display: flex; gap: 6px; justify-content: center;">
+                        <button type="button" class="btn btn-secondary btn-edit-staff" data-id="${staff.id}" style="padding: 5px 8px; font-size: 0.75rem;" title="情報を編集">
+                            <i data-lucide="pencil" style="width: 13px; height: 13px;"></i> 編集
+                        </button>
+                        <button type="button" class="btn btn-secondary btn-danger btn-delete-staff" data-id="${staff.id}" style="padding: 5px 8px; font-size: 0.75rem;" title="削除">
+                            <i data-lucide="trash-2" style="width: 13px; height: 13px;"></i>
+                        </button>
+                    </div>
                 </td>
             `;
             elements.adminStaffTableBody.appendChild(tr);
         });
 
-        lucide.createIcons();
+        if (window.lucide) lucide.createIcons();
 
-        // Bind delete buttons
+        // 並び替え（上へ/下へ）ハンドラー
+        document.querySelectorAll('.btn-move-staff').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const idx = parseInt(e.currentTarget.dataset.index, 10);
+                const dir = parseInt(e.currentTarget.dataset.dir, 10);
+                const targetIdx = idx + dir;
+                if (targetIdx < 0 || targetIdx >= staffs.length) return;
+                
+                const temp = staffs[idx];
+                staffs[idx] = staffs[targetIdx];
+                staffs[targetIdx] = temp;
+                
+                saveState();
+                renderAdminStaffTable();
+                renderStaffGrid();
+            });
+        });
+
+        // 編集ボタンハンドラー
+        document.querySelectorAll('.btn-edit-staff').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const staffId = e.currentTarget.dataset.id;
+                const staff = staffs.find(s => s.id === staffId);
+                if (!staff) return;
+                const profile = getStaffDisplayProfile(staff);
+
+                elements.editStaffId.value = staff.id;
+                elements.editStaffName.value = staff.name;
+                elements.editStaffEn.value = profile.en || '';
+                elements.editStaffCode.value = profile.code || '';
+                elements.editStaffSub.value = profile.sub || '';
+
+                elements.modalEditStaff.classList.add('active');
+                if (window.lucide) lucide.createIcons();
+            });
+        });
+
+        // 削除ボタンハンドラー
         document.querySelectorAll('.btn-delete-staff').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const staffId = e.currentTarget.dataset.id;
@@ -2911,14 +2997,58 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (confirm(`${staff.name}さんを削除してもよろしいですか？\n※この操作は元に戻せません。`)) {
                     staffs = staffs.filter(s => s.id !== staffId);
-                    // Cleanup points
                     delete pointLedger[staffId];
                     
                     saveState();
                     renderAdminStaffTable();
+                    renderStaffGrid();
                     showToast(`${staff.name}さんを削除しました。`, 'warning');
                 }
             });
+        });
+    }
+
+    // スタッフ編集モーダルのイベント
+    if (elements.formEditStaff) {
+        elements.formEditStaff.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const staffId = elements.editStaffId.value;
+            const staff = staffs.find(s => s.id === staffId);
+            if (!staff) return;
+
+            const newName = elements.editStaffName.value.trim();
+            const newEn = elements.editStaffEn.value.trim();
+            const newCode = elements.editStaffCode.value.trim().toUpperCase();
+            const newSub = elements.editStaffSub.value.trim();
+
+            if (!newName) return;
+
+            staff.name = newName;
+            
+            // プロフィール定義を更新
+            KNOWN_STAFF_PROFILES[newName] = {
+                en: newEn || newName,
+                code: newCode || newName.substring(0, 2).toUpperCase(),
+                theme: (KNOWN_STAFF_PROFILES[newName]?.theme) || THEME_CYCLE[Math.floor(Math.random() * THEME_CYCLE.length)],
+                sub: newSub || null
+            };
+
+            saveState();
+            renderAdminStaffTable();
+            renderStaffGrid();
+            elements.modalEditStaff.classList.remove('active');
+            showToast(`${newName}さんの情報を更新しました！`, 'success');
+        });
+    }
+
+    if (elements.btnCloseEditStaff) {
+        elements.btnCloseEditStaff.addEventListener('click', () => {
+            elements.modalEditStaff.classList.remove('active');
+        });
+    }
+    if (elements.btnCancelEditStaff) {
+        elements.btnCancelEditStaff.addEventListener('click', () => {
+            elements.modalEditStaff.classList.remove('active');
         });
     }
 

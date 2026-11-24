@@ -10,7 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
-    <link rel="stylesheet" href="style.css?v=20261124_03">
+    <link rel="stylesheet" href="style.css?v=20261124_04">
 </head>
 <body>
     <!-- App Container -->
@@ -290,8 +290,12 @@
                             <h3>新規スタッフ登録</h3>
                             <form id="form-add-staff" class="admin-form">
                                 <div class="form-group">
-                                    <label for="new-staff-name">スタッフ名</label>
+                                    <label for="new-staff-name">スタッフ名（日本語）</label>
                                     <input type="text" id="new-staff-name" class="form-control" placeholder="例: 山田 花子" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="new-staff-en">英語表記（任意）</label>
+                                    <input type="text" id="new-staff-en" class="form-control" placeholder="例: H. YAMADA（空欄なら自動生成）">
                                 </div>
                                 <button type="submit" class="btn btn-primary btn-full">登録する</button>
                             </form>
@@ -299,14 +303,18 @@
 
                         <!-- Staff List for Edit/Delete -->
                         <div class="admin-card">
-                            <h3>スタッフ一覧</h3>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+                                <h3 style="margin: 0;">スタッフ一覧・並び順調整</h3>
+                                <span style="font-size: 0.8rem; color: var(--text-muted);">↑↓で打刻画面の並び順を変更できます</span>
+                            </div>
                             <div class="admin-table-container">
                                 <table class="data-table small-table">
                                     <thead>
                                         <tr>
-                                            <th>名前</th>
-                                            <th>状態</th>
-                                            <th>操作</th>
+                                            <th style="width: 75px; text-align: center;">並び順</th>
+                                            <th>スタッフ名</th>
+                                            <th style="width: 80px; text-align: center;">状態</th>
+                                            <th style="width: 140px; text-align: center;">操作</th>
                                         </tr>
                                     </thead>
                                     <tbody id="admin-staff-table-body">
@@ -441,6 +449,41 @@
                 </div>
             </section>
         </main>
+    </div>
+
+    <!-- Edit Staff Modal -->
+    <div id="modal-edit-staff" class="modal">
+        <div class="modal-content" style="max-width: 440px; position: relative;">
+            <button type="button" id="btn-close-edit-staff" class="btn-close"><i data-lucide="x"></i></button>
+            <div class="modal-header">
+                <i data-lucide="user-cog" class="lock-icon" style="background: #e0f2fe; color: #0284c7; margin: 0 auto 0.75rem auto; display: block; width: 2.75rem; height: 2.75rem; border-radius: 50%; padding: 0.55rem;"></i>
+                <h3>スタッフ情報の変更</h3>
+                <p class="field-desc">打刻カードの名前・表記を変更できます。</p>
+            </div>
+            <form id="form-edit-staff" class="modal-form">
+                <input type="hidden" id="edit-staff-id">
+                <div class="form-group">
+                    <label for="edit-staff-name">スタッフ名（日本語）</label>
+                    <input type="text" id="edit-staff-name" class="form-control" required placeholder="例: 木村 哲子">
+                </div>
+                <div class="form-group">
+                    <label for="edit-staff-en">英語表記（カード上段・任意）</label>
+                    <input type="text" id="edit-staff-en" class="form-control" placeholder="例: S. KIMURA（空欄なら自動生成）">
+                </div>
+                <div class="form-group">
+                    <label for="edit-staff-code">アバター略称（最大3文字・任意）</label>
+                    <input type="text" id="edit-staff-code" class="form-control" maxlength="3" placeholder="例: SK（空欄なら自動生成）">
+                </div>
+                <div class="form-group">
+                    <label for="edit-staff-sub">サブ表記（役職等・任意）</label>
+                    <input type="text" id="edit-staff-sub" class="form-control" placeholder="例: 応援看護師 1（空欄なら日本語名表示）">
+                </div>
+                <div style="display: flex; gap: 0.75rem; margin-top: 1.25rem;">
+                    <button type="button" id="btn-cancel-edit-staff" class="btn btn-secondary btn-full">キャンセル</button>
+                    <button type="submit" class="btn btn-primary btn-full">保存する</button>
+                </div>
+            </form>
+        </div>
     </div>
 
     <!-- Admin Authentication Modal -->
@@ -673,6 +716,6 @@
 
     <script src="exceljs.min.js"></script>
     <script src="excel-template.js"></script>
-    <script src="app.js?v=20261124_03"></script>
+    <script src="app.js?v=20261124_04"></script>
 </body>
 </html>
