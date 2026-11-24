@@ -73,13 +73,15 @@ function parseJson(str) {
 
 function loadAllData(ss, calendarId) {
   var calData = getTodayCalendarEvents(calendarId);
+  var shiftData = loadTodayShift(ss);
   return {
     records: loadRecords(ss),
     pointLedger: loadPointLedger(ss),
     pointLogs: loadPointLogs(ss),
     correctionRequests: loadRequests(ss),
     calendarEvents: calData.events,
-    calendarStatus: calData.status
+    calendarStatus: calData.status,
+    todayShift: shiftData
   };
 }
 
@@ -402,4 +404,211 @@ function formatTime(val) {
     return Utilities.formatDate(val, Session.getScriptTimeZone(), 'HH:mm:ss');
   }
   return String(val);
+}
+
+// ==========================================================================
+// シフト表（月別シート）連携＆自動生成モジュール
+// ==========================================================================
+
+var DEFAULT_SHIFT_STAFFS = [
+  '河合 茂明', '河合 朋子', 'マックアリース 温子', '千葉 幸夫', '尾崎 昭太',
+  '木村 哲子', '末廣 綾乃', '北口 愛美', '寺西 真名美', '植西 順子',
+  '千原 由佳菜', 'HELP Ns. 1', 'HELP Ns. 2', 'HELP St. 1', 'HELP St. 2'
+];
+
+var DEFAULT_SHIFT_OPTIONS = [
+  '10:00〜19:00',
+  '10:00〜13:00',
+  '17:00〜19:00',
+  '10:00〜13:00, 17:00〜19:00',
+  '休'
+];
+
+/**
+ * 本日のシフト情報を取得する
+ * 今月シート（例: シフト_2026-11）から本日の行を読み取り、各スタッフの出勤予定を返す
+ */
+function loadTodayShift(ss) {
+  var now = new Date();
+  var tz = Session.getScriptTimeZone();
+  var year = now.getFullYear();
+  var month = now.getMonth() + 1;
+  var day = now.getDate();
+  var todayStr = Utilities.formatDate(now, tz, 'yyyy-MM-dd');
+
+  var sheet = findMonthlyShiftSheet(ss, year, month);
+  if (!sheet) {
+    // なければ今月のシフトシートを自動生成
+    sheet = getOrCreateMonthlyShiftSheet(ss, year, month);
+  }
+
+  var result = {
+    sheetName: sheet ? sheet.getName() : null,
+    date: todayStr,
+    shifts: {}
+  };
+
+  if (!sheet) return result;
+
+  var lastRow = sheet.getLastRow();
+  var lastCol = sheet.getLastColumn();
+  if (lastRow < 2 || lastCol < 3) return result;
+
+  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  var rows = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+
+  // 本日の行を探す
+  var todayRow = null;
+  for (var i = 0; i < rows.length; i++) {
+    var cellDate = rows[i][0];
+    var rowDay = null;
+
+    if (cellDate instanceof Date) {
+      rowDay = cellDate.getDate();
+    } else if (typeof cellDate === 'number') {
+      rowDay = cellDate;
+    } else if (typeof cellDate === 'string') {
+      var m = cellDate.match(/(\d{1,2})$/);
+      if (m) rowDay = parseInt(m[1], 10);
+      else if (cellDate.indexOf(todayStr) !== -1) rowDay = day;
+    }
+
+    if (rowDay === day) {
+      todayRow = rows[i];
+      break;
+    }
+  }
+
+  if (todayRow) {
+    // 各スタッフ列のシフト値を取得
+    for (var col = 2; col < headers.length; col++) {
+      var staffName = String(headers[col] || '').trim();
+      if (!staffName) continue;
+      var val = String(todayRow[col] || '').trim();
+
+      // 空白や「休」でなければ出勤シフトありと判定
+      if (val && val !== '休' && val !== '×' && val !== '-') {
+        result.shifts[staffName] = val;
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * 月別シフトシートを検索する
+ */
+function findMonthlyShiftSheet(ss, year, month) {
+  var mStr = String(month).padStart(2, '0');
+  var candidates = [
+    'シフト_' + year + '-' + mStr,
+    'シフト_' + year + mStr,
+    year + '年' + month + '月シフト',
+    year + '年' + mStr + '月シフト',
+    'シフト_' + year + '年' + month + '月',
+    'シフト_' + year + '/' + mStr
+  ];
+
+  for (var i = 0; i < candidates.length; i++) {
+    var s = ss.getSheetByName(candidates[i]);
+    if (s) return s;
+  }
+
+  // あいまい検索（シート名に 年月 が含まれているもの）
+  var sheets = ss.getSheets();
+  for (var j = 0; j < sheets.length; j++) {
+    var name = sheets[j].getName();
+    if (name.indexOf(year + '-' + mStr) !== -1 || name.indexOf(year + '年' + month + '月') !== -1) {
+      return sheets[j];
+    }
+  }
+  return null;
+}
+
+/**
+ * 月別シフトシートを作成・初期化する（ドロップダウン付き、土日色付け、自由入力可）
+ */
+function getOrCreateMonthlyShiftSheet(ss, year, month) {
+  var mStr = String(month).padStart(2, '0');
+  var sheetName = 'シフト_' + year + '-' + mStr;
+  var sheet = ss.getSheetByName(sheetName);
+  if (sheet) return sheet;
+
+  sheet = ss.insertSheet(sheetName);
+
+  var headers = ['日付', '曜日'].concat(DEFAULT_SHIFT_STAFFS);
+  var daysInMonth = new Date(year, month, 0).getDate();
+  var daysOfWeekJp = ['日', '月', '火', '水', '木', '金', '土'];
+
+  var rows = [];
+  for (var d = 1; d <= daysInMonth; d++) {
+    var curDate = new Date(year, month - 1, d);
+    var dayOfWeek = daysOfWeekJp[curDate.getDay()];
+    var row = [d, dayOfWeek];
+    for (var s = 0; s < DEFAULT_SHIFT_STAFFS.length; s++) {
+      row.push('');
+    }
+    rows.push(row);
+  }
+
+  // ヘッダー書き込み
+  sheet.getRange(1, 1, 1, headers.length)
+    .setValues([headers])
+    .setFontWeight('bold')
+    .setBackground('#0f172a')
+    .setFontColor('#ffffff')
+    .setHorizontalAlignment('center');
+
+  // データ行書き込み
+  var dataRange = sheet.getRange(2, 1, rows.length, headers.length);
+  dataRange.setValues(rows);
+  dataRange.setHorizontalAlignment('center');
+
+  // 1行目固定
+  sheet.setFrozenRows(1);
+  sheet.setFrozenColumns(2);
+
+  // 列幅の調整
+  sheet.setColumnWidth(1, 55); // 日付
+  sheet.setColumnWidth(2, 45); // 曜日
+  for (var c = 3; c <= headers.length; c++) {
+    sheet.setColumnWidth(c, 160); // スタッフ列（時間帯が入るため少し広め）
+  }
+
+  // ドロップダウンリスト（入力規則）を設定
+  // setAllowInvalid(true) により、リストからの選択も、手入力（別時間や2コマ中抜けなど）も両方可能！
+  var shiftRange = sheet.getRange(2, 3, rows.length, DEFAULT_SHIFT_STAFFS.length);
+  var rule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(DEFAULT_SHIFT_OPTIONS, true)
+    .setAllowInvalid(true)
+    .setHelpText('リストから選択するか、「10:00〜13:00, 17:00〜19:00」のように自由に手入力もできます。')
+    .build();
+  shiftRange.setDataValidation(rule);
+
+  // 土日の行にやさしい背景色を設定
+  for (var r = 0; r < rows.length; r++) {
+    var dow = rows[r][1];
+    var rowIndex = r + 2;
+    if (dow === '日') {
+      sheet.getRange(rowIndex, 1, 1, headers.length).setBackground('#fff1f2'); // 淡い赤
+      sheet.getRange(rowIndex, 2).setFontColor('#e11d48').setFontWeight('bold');
+    } else if (dow === '土') {
+      sheet.getRange(rowIndex, 1, 1, headers.length).setBackground('#f0f9ff'); // 淡い青
+      sheet.getRange(rowIndex, 2).setFontColor('#0284c7').setFontWeight('bold');
+    }
+  }
+
+  return sheet;
+}
+
+/**
+ * 手動で翌月などのシフトシートを作成したい時のテスト/呼び出し用関数
+ */
+function createNextMonthShiftSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var now = new Date();
+  var nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  var s = getOrCreateMonthlyShiftSheet(ss, nextMonthDate.getFullYear(), nextMonthDate.getMonth() + 1);
+  Logger.log('作成完了: ' + s.getName());
 }

@@ -475,6 +475,61 @@ body {
     margin-top: 0.2rem;
     margin-bottom: 0.65rem;
     text-align: center;
+    transition: all 0.25s ease;
+}
+
+/* 本日シフト予定者の名前ハイライト（ふんわり上品なアクセントカラー） */
+.staff-card-jp-name.shift-highlight {
+    background: linear-gradient(135deg, #e0f2fe 0%, #e0e7ff 100%);
+    color: #0369a1;
+    font-weight: 700;
+    padding: 0.15rem 0.65rem;
+    border-radius: 9999px;
+    display: inline-block;
+    box-shadow: 0 1px 3px rgba(3, 105, 161, 0.12);
+    border: 1px solid rgba(186, 230, 253, 0.85);
+    letter-spacing: 0.02em;
+}
+
+/* 本日シフト予定者のカードスタイル */
+.staff-card.has-today-shift.is-offline {
+    border-color: #bae6fd;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 55%, #f0f9ff 100%);
+}
+
+.staff-card.has-today-shift.is-offline::before {
+    background: linear-gradient(90deg, #38bdf8, #818cf8);
+}
+
+/* シフト予定ピルバッジ（カード上部に常駐） */
+.staff-card-shift-badge {
+    position: absolute;
+    top: 0.55rem;
+    left: 50%;
+    transform: translateX(-50%);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.15rem 0.55rem;
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: #0284c7;
+    background: #f0f9ff;
+    border: 1px solid #bae6fd;
+    border-radius: 9999px;
+    white-space: nowrap;
+    letter-spacing: 0.02em;
+    box-shadow: 0 1px 2px rgba(2, 132, 199, 0.08);
+    z-index: 2;
+    max-width: 90%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.staff-card-shift-badge span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* 洗練されたステータスバッジ */

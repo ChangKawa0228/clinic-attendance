@@ -275,6 +275,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     let todayEvents = store.get('today_events', []);
     let calendarSyncStatus = store.get('calendar_sync_status', null);
+    let todayShift = store.get('today_shift', { sheetName: null, date: null, shifts: {} });
 
     // Helper to calculate billing period (16th of previous month to 15th of current month)
     function getDefaultBillingPeriod() {
@@ -543,8 +544,24 @@ document.addEventListener('DOMContentLoaded', () => {
             const statusClassModifier = isOnline ? 'is-online' : (isBreak ? 'is-break' : 'is-offline');
             const activeClass = selectedStaffId === staff.id ? 'active-selection' : '';
 
-            card.className = `staff-card ${statusClassModifier} ${activeClass}`;
+            // 本日のシフト予定があるか判定（名前またはスペース除去一致）
+            const staffCleanName = staff.name.replace(/\s+/g, '');
+            let shiftInfo = null;
+            if (todayShift && todayShift.shifts) {
+                for (const shiftName in todayShift.shifts) {
+                    if (shiftName === staff.name || shiftName.replace(/\s+/g, '') === staffCleanName) {
+                        shiftInfo = todayShift.shifts[shiftName];
+                        break;
+                    }
+                }
+            }
+
+            const shiftClass = shiftInfo ? 'has-today-shift' : '';
+            card.className = `staff-card ${statusClassModifier} ${shiftClass} ${activeClass}`;
             card.dataset.id = staff.id;
+            if (shiftInfo) {
+                card.dataset.shift = shiftInfo;
+            }
             
             let statusText = '未出勤';
             let statusBadgeClass = 'status-offline';
@@ -560,7 +577,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 statusDot = '<div class="break-status-dot" title="休憩中"></div>';
             }
 
+            // シフト予定バッジ（ピルタグ）
+            let shiftBadgeHtml = '';
+            if (shiftInfo) {
+                shiftBadgeHtml = `
+                    <div class="staff-card-shift-badge" title="本日シフト予定: ${escapeHTML(shiftInfo)}">
+                        <i data-lucide="clock" style="width:11px;height:11px;"></i>
+                        <span>${escapeHTML(shiftInfo)}</span>
+                    </div>
+                `;
+            }
+
             card.innerHTML = `
+                ${shiftBadgeHtml}
                 <div class="staff-avatar-wrap">
                     <div class="staff-card-avatar ${profile.theme}">
                         <span>${escapeHTML(profile.code)}</span>
@@ -568,7 +597,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     ${statusDot}
                 </div>
                 <div class="staff-card-en-name">${escapeHTML(profile.en)}</div>
-                <div class="staff-card-jp-name">${escapeHTML(profile.sub || staff.name)}</div>
+                <div class="staff-card-jp-name ${shiftInfo ? 'shift-highlight' : ''}">${escapeHTML(profile.sub || staff.name)}</div>
                 <div class="status-badge ${statusBadgeClass}">${statusText}</div>
             `;
 
@@ -576,6 +605,7 @@ document.addEventListener('DOMContentLoaded', () => {
             elements.staffGrid.appendChild(card);
         });
 
+        if (window.lucide) lucide.createIcons();
         updateBreakIndicator();
     }
 
@@ -603,10 +633,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Set Info with internationalized typography & luxury gradient
         const profile = getStaffDisplayProfile(staff);
+        const staffCleanName = staff.name.replace(/\s+/g, '');
+        let shiftInfo = null;
+        if (todayShift && todayShift.shifts) {
+            for (const shiftName in todayShift.shifts) {
+                if (shiftName === staff.name || shiftName.replace(/\s+/g, '') === staffCleanName) {
+                    shiftInfo = todayShift.shifts[shiftName];
+                    break;
+                }
+            }
+        }
+        const shiftHtml = shiftInfo 
+            ? `<div style="display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; padding: 2px 8px; background: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd; border-radius: 999px; font-size: 0.75rem; font-weight: 700;"><i data-lucide="calendar-clock" style="width:12px;height:12px;"></i> 本日シフト: ${escapeHTML(shiftInfo)}</div>`
+            : '';
+
         elements.activeStaffName.innerHTML = `
             <div style="font-family: 'Plus Jakarta Sans', system-ui, sans-serif; font-weight: 800; font-size: 1.25rem; letter-spacing: 0.04em; color: #0f172a;">${escapeHTML(profile.en)}</div>
             <div style="font-size: 0.85rem; color: #64748b; font-weight: 600; margin-top: 3px;">${escapeHTML(profile.sub || staff.name)}</div>
+            ${shiftHtml}
         `;
+        if (window.lucide) lucide.createIcons();
         elements.activeStaffInitial.textContent = profile.code;
         elements.activeStaffAvatar.className = `staff-avatar ${profile.theme}`;
         elements.activeStaffAvatar.style.backgroundColor = '';
@@ -1581,6 +1627,13 @@ document.addEventListener('DOMContentLoaded', () => {
         if (cloudData.calendarStatus) {
             calendarSyncStatus = cloudData.calendarStatus;
             store.set('calendar_sync_status', calendarSyncStatus);
+        }
+
+        // 5. Shift Schedule マージ（本日の出勤シフト予定）
+        if (cloudData.todayShift && typeof cloudData.todayShift === 'object') {
+            todayShift = cloudData.todayShift;
+            store.set('today_shift', todayShift);
+            hasChanges = true;
         }
 
         if (hasChanges) {
