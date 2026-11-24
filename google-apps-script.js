@@ -4,7 +4,14 @@ function authorizeCalendar() {
   Logger.log("認証成功！カレンダー名: " + cal.getName());
 }
 
-// 初回カレンダー権限承認用テスト関数
+// シフト表スプレッドシート権限の強制承認＆初期化用関数（初回のみ実行してアクセス許可）
+function authorizeShiftSpreadsheet() {
+  var shiftSs = SpreadsheetApp.openById("18FFiUQSJ_JOLpsienHUfN2Ql06pXrNTFAWlvVo_CG5E");
+  Logger.log("シフト表スプレッドシート接続成功！ファイル名: " + shiftSs.getName());
+  var now = new Date();
+  var sheet = getOrCreateMonthlyShiftSheet(shiftSs, now.getFullYear(), now.getMonth() + 1);
+  Logger.log("今月のシフトシート確認/作成完了: " + sheet.getName());
+}
 
 function doGet(e) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -413,7 +420,7 @@ function formatTime(val) {
 // ★シフト表を「出勤記録とは別のスプレッドシート」で管理したい場合は、
 // そのシフト表スプレッドシートのID（URLの /d/〇〇〇/edit の部分）をここに記入してください。
 // 空文字 "" の場合は、この出勤記録スプレッドシート内に作成されます。
-var SHIFT_SPREADSHEET_ID = "";
+var SHIFT_SPREADSHEET_ID = "18FFiUQSJ_JOLpsienHUfN2Ql06pXrNTFAWlvVo_CG5E";
 
 function getShiftSpreadsheet(ss) {
   if (SHIFT_SPREADSHEET_ID && SHIFT_SPREADSHEET_ID.trim() !== "") {
