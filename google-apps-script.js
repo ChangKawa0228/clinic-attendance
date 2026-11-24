@@ -410,6 +410,23 @@ function formatTime(val) {
 // シフト表（月別シート）連携＆自動生成モジュール
 // ==========================================================================
 
+// ★シフト表を「出勤記録とは別のスプレッドシート」で管理したい場合は、
+// そのシフト表スプレッドシートのID（URLの /d/〇〇〇/edit の部分）をここに記入してください。
+// 空文字 "" の場合は、この出勤記録スプレッドシート内に作成されます。
+var SHIFT_SPREADSHEET_ID = "";
+
+function getShiftSpreadsheet(ss) {
+  if (SHIFT_SPREADSHEET_ID && SHIFT_SPREADSHEET_ID.trim() !== "") {
+    try {
+      return SpreadsheetApp.openById(SHIFT_SPREADSHEET_ID.trim());
+    } catch (e) {
+      Logger.log("指定されたシフト表スプレッドシートが開けませんでした（アクセス権限等をご確認ください）: " + e.message);
+      return ss;
+    }
+  }
+  return ss;
+}
+
 var DEFAULT_SHIFT_STAFFS = [
   '河合 茂明', '河合 朋子', 'マックアリース 温子', '千葉 幸夫', '尾崎 昭太',
   '木村 哲子', '末廣 綾乃', '北口 愛美', '寺西 真名美', '植西 順子',
@@ -429,6 +446,7 @@ var DEFAULT_SHIFT_OPTIONS = [
  * 今月シート（例: シフト_2026-11）から本日の行を読み取り、各スタッフの出勤予定を返す
  */
 function loadTodayShift(ss) {
+  var targetSs = getShiftSpreadsheet(ss);
   var now = new Date();
   var tz = Session.getScriptTimeZone();
   var year = now.getFullYear();
@@ -436,10 +454,10 @@ function loadTodayShift(ss) {
   var day = now.getDate();
   var todayStr = Utilities.formatDate(now, tz, 'yyyy-MM-dd');
 
-  var sheet = findMonthlyShiftSheet(ss, year, month);
+  var sheet = findMonthlyShiftSheet(targetSs, year, month);
   if (!sheet) {
     // なければ今月のシフトシートを自動生成
-    sheet = getOrCreateMonthlyShiftSheet(ss, year, month);
+    sheet = getOrCreateMonthlyShiftSheet(targetSs, year, month);
   }
 
   var result = {
@@ -607,8 +625,9 @@ function getOrCreateMonthlyShiftSheet(ss, year, month) {
  */
 function createNextMonthShiftSheet() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var targetSs = getShiftSpreadsheet(ss);
   var now = new Date();
   var nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  var s = getOrCreateMonthlyShiftSheet(ss, nextMonthDate.getFullYear(), nextMonthDate.getMonth() + 1);
+  var s = getOrCreateMonthlyShiftSheet(targetSs, nextMonthDate.getFullYear(), nextMonthDate.getMonth() + 1);
   Logger.log('作成完了: ' + s.getName());
 }

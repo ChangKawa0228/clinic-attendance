@@ -755,6 +755,52 @@ document.addEventListener('DOMContentLoaded', () => {
         return String(timeVal);
     }
 
+    /**
+     * シフト文字列（例: "10:00〜13:00, 17:00〜19:00"）を解析してコマ一覧を返す
+     */
+    function parseShiftTimeRanges(shiftText) {
+        if (!shiftText || typeof shiftText !== 'string') return [];
+        let norm = shiftText
+            .replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0))
+            .replace(/[：]/g, ':')
+            .replace(/[～〜ー−-]/g, '~')
+            .replace(/[，、]/g, ',');
+
+        const parts = norm.split(/[,/／\n\r\s]+/);
+        const ranges = [];
+
+        parts.forEach(part => {
+            const matchColon = part.match(/(\d{1,2}):(\d{2})\s*~\s*(\d{1,2}):(\d{2})/);
+            const matchKanji = part.match(/(\d{1,2})(?:時|:)?(\d{2})?分?\s*~\s*(\d{1,2})(?:時|:)?(\d{2})?分?/);
+
+            if (matchColon) {
+                const sH = parseInt(matchColon[1], 10);
+                const sM = parseInt(matchColon[2], 10);
+                const eH = parseInt(matchColon[3], 10);
+                const eM = parseInt(matchColon[4], 10);
+                ranges.push({
+                    startMin: sH * 60 + sM,
+                    endMin: eH * 60 + eM,
+                    startStr: `${String(sH).padStart(2, '0')}:${String(sM).padStart(2, '0')}`,
+                    endStr: `${String(eH).padStart(2, '0')}:${String(eM).padStart(2, '0')}`
+                });
+            } else if (matchKanji && matchKanji[1] && matchKanji[3]) {
+                const sH = parseInt(matchKanji[1], 10);
+                const sM = parseInt(matchKanji[2] || '0', 10);
+                const eH = parseInt(matchKanji[3], 10);
+                const eM = parseInt(matchKanji[4] || '0', 10);
+                ranges.push({
+                    startMin: sH * 60 + sM,
+                    endMin: eH * 60 + eM,
+                    startStr: `${String(sH).padStart(2, '0')}:${String(sM).padStart(2, '0')}`,
+                    endStr: `${String(eH).padStart(2, '0')}:${String(eM).padStart(2, '0')}`
+                });
+            }
+        });
+
+        return ranges;
+    }
+
     function getTodayString() {
         const d = new Date();
         return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -1079,11 +1125,56 @@ document.addEventListener('DOMContentLoaded', () => {
         record.peerPoints = 0;
         record.overtimeReason = null;
 
-        // Check Overtime Condition (8時間超、または18:30以降の退勤)
-        const nowHour = now.getHours();
-        const nowMin = now.getMinutes();
-        const isLate = (nowHour > 18) || (nowHour === 18 && nowMin >= 30);
-        const isOvertime = workMinutes >= 480 || isLate;
+        // ==========================================================================
+        // 残業判定ロジック（シフト予定に対する残業 ＆ 8時間超/18:30以降の判定）
+        // ==========================================================================
+        const staffCleanName = staff.name.replace(/\s+/g, '');
+        let shiftInfo = null;
+        if (todayShift && todayShift.shifts) {
+            for (const shiftName in todayShift.shifts) {
+                if (shiftName === staff.name || shiftName.replace(/\s+/g, '') === staffCleanName) {
+                    shiftInfo = todayShift.shifts[shiftName];
+                    break;
+                }
+            }
+        }
+
+        let isOvertime = false;
+        let overtimeReasonGuide = '';
+        const nowTotalMin = now.getHours() * 60 + now.getMinutes();
+
+        if (shiftInfo) {
+            const ranges = parseShiftTimeRanges(shiftInfo);
+            if (ranges.length > 0) {
+                // 中抜けなどの複数コマに対応：現在時刻に近い（または該当する）コマの終了時刻を特定
+                let matchedRange = null;
+                for (const r of ranges) {
+                    // コマの開始30分前以降であればそのコマの対象とみなす
+                    if (nowTotalMin >= r.startMin - 30) {
+                        matchedRange = r;
+                    }
+                }
+                if (!matchedRange) matchedRange = ranges[ranges.length - 1];
+
+                // 予定終了時刻を過ぎているか判定
+                if (nowTotalMin > matchedRange.endMin) {
+                    isOvertime = true;
+                    const overMin = nowTotalMin - matchedRange.endMin;
+                    overtimeReasonGuide = `本日はシフト予定（〜${matchedRange.endStr}）を ${overMin}分 超過しています。該当する業務内容を選択してください。`;
+                }
+            }
+        }
+
+        // シフト予定がない、または判定されなかった場合のフォールバック（8時間超、または18:30以降）
+        if (!isOvertime) {
+            const nowHour = now.getHours();
+            const nowMin = now.getMinutes();
+            const isLate = (nowHour > 18) || (nowHour === 18 && nowMin >= 30);
+            if (workMinutes >= 480 || isLate) {
+                isOvertime = true;
+                overtimeReasonGuide = `本日は所定勤務時間を超えています。該当する業務内容を選択してください。`;
+            }
+        }
 
         // ★最重要セーフティネット: 退勤打刻をこの瞬間に即座に保存・クラウド送信！
         // モーダルを閉じられたりブラウザを終了されても、退勤打刻自体は絶対に失われないように先行確定
@@ -1099,6 +1190,10 @@ document.addEventListener('DOMContentLoaded', () => {
             // Overtime Section visibility
             if (isOvertime) {
                 elements.overtimeReasonSection.classList.remove('hidden');
+                const guideEl = elements.overtimeReasonSection.querySelector('p');
+                if (guideEl && overtimeReasonGuide) {
+                    guideEl.textContent = overtimeReasonGuide;
+                }
                 elements.selectOvertimeReason.value = '';
                 elements.selectOvertimeReason.style.borderColor = '#f59e0b';
                 elements.overtimeReasonDetail.value = '';
