@@ -100,24 +100,44 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // ★全PC完全同期: DEFAULT_STAFFS（千原由佳菜さんやヘルプスタッフ等）で未登録のスタッフがいれば確実に自動マージ追加
+    // ★全PC完全同期: DEFAULT_STAFFS（千原由佳菜さん等）が漏れていれば確実に復元＆正しい並び順で同期
+    const existingStaffMap = new Map();
+    staffs.forEach(s => {
+        const cleanName = s.name ? s.name.replace(/\s+/g, '') : '';
+        existingStaffMap.set(s.id, s);
+        if (cleanName) existingStaffMap.set(cleanName, s);
+    });
+
+    const synchronizedStaffs = [];
     DEFAULT_STAFFS.forEach(defStaff => {
         const cleanDef = defStaff.name.replace(/\s+/g, '');
-        const exists = staffs.some(s => s.id === defStaff.id || (s.name && s.name.replace(/\s+/g, '') === cleanDef));
-        if (!exists) {
-            staffs.push({
-                id: defStaff.id,
-                name: defStaff.name,
-                status: 'offline',
-                avatarColor: defStaff.avatarColor
+        const current = existingStaffMap.get(defStaff.id) || existingStaffMap.get(cleanDef);
+        if (current) {
+            // 既存の状態（online/break等）やアバター色を維持
+            synchronizedStaffs.push({
+                ...defStaff,
+                status: current.status || 'offline',
+                lastActionTime: current.lastActionTime || null
             });
+        } else {
+            // 新規スタッフ（千原さん等）をデフォルト位置に追加
+            synchronizedStaffs.push({ ...defStaff });
             staffMigrationNeeded = true;
         }
     });
 
-    if (staffMigrationNeeded) {
-        store.set('staffs', staffs);
-    }
+    // DEFAULT_STAFFSに含まれていない追加スタッフ（もしあれば）を末尾に追加
+    staffs.forEach(s => {
+        const cleanName = s.name ? s.name.replace(/\s+/g, '') : '';
+        const inDef = DEFAULT_STAFFS.some(d => d.id === s.id || d.name.replace(/\s+/g, '') === cleanName);
+        if (!inDef) {
+            synchronizedStaffs.push(s);
+            staffMigrationNeeded = true;
+        }
+    });
+
+    staffs = synchronizedStaffs;
+    store.set('staffs', staffs);
 
     let selectedStaffId = null;
     let isAdminAuthenticated = false;
