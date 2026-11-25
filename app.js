@@ -158,6 +158,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Staff / Control Panel
         staffGrid: document.getElementById('staff-grid'),
+        timelineContainer: document.getElementById('timeline-container'),
         controlPanel: document.getElementById('control-panel'),
         btnClosePanel: document.getElementById('btn-close-panel'),
         activeStaffAvatar: document.getElementById('active-staff-avatar'),
@@ -356,6 +357,11 @@ document.addEventListener('DOMContentLoaded', () => {
         
         elements.currentDate.textContent = `${year}年${month}月${date}日(${day})`;
         elements.currentTime.textContent = `${hours}:${minutes}:${seconds}`;
+
+        // 30秒ごとにタイムラインの現在時刻ライン＆実績バーをリアルタイム更新
+        if (seconds === '00' || seconds === '30') {
+            renderTodayTimeline();
+        }
     }
     
     updateClock();
@@ -631,6 +637,238 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (window.lucide) lucide.createIcons();
         updateBreakIndicator();
+        renderTodayTimeline();
+    }
+
+    // ==========================================================================
+    // Realtime Schedule & Actual Timeline (予定 vs 実績 横棒ガントチャート)
+    // ==========================================================================
+    function parseTimeToMinutes(timeStr) {
+        if (!timeStr || typeof timeStr !== 'string') return null;
+        const m = timeStr.match(/(\d{1,2}):(\d{2})/);
+        if (!m) return null;
+        return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+    }
+
+    function renderTodayTimeline() {
+        if (!elements.timelineContainer) return;
+
+        const now = new Date();
+        const nowHour = now.getHours();
+        const nowMin = now.getMinutes();
+        const nowTotalMin = nowHour * 60 + nowMin;
+
+        // タイムラインの表示時間範囲（デフォルト: 8:00〜20:00 = 480分〜1200分）
+        let baseStartHour = 8;
+        let baseEndHour = 20;
+
+        // 本日シフトまたは本日実績があるスタッフを抽出
+        const activeStaffList = [];
+        staffs.forEach(staff => {
+            const cleanName = staff.name ? staff.name.replace(/\s+/g, '') : '';
+            let shiftText = null;
+            if (todayShift && todayShift.shifts) {
+                for (const k in todayShift.shifts) {
+                    if (k === staff.name || k.replace(/\s+/g, '') === cleanName) {
+                        shiftText = todayShift.shifts[k];
+                        break;
+                    }
+                }
+            }
+
+            const todayRec = getTodayRecord(staff.id);
+            const hasShift = !!shiftText;
+            const hasRecord = !!(todayRec && todayRec.checkin);
+
+            if (hasShift || hasRecord) {
+                activeStaffList.push({
+                    staff: staff,
+                    shiftText: shiftText,
+                    record: todayRec
+                });
+            }
+        });
+
+        // 本日対象者が0人の場合は全スタッフを表示
+        const displayList = activeStaffList.length > 0 ? activeStaffList : staffs.map(s => ({
+            staff: s,
+            shiftText: null,
+            record: getTodayRecord(s.id)
+        }));
+
+        // 早出・遅出に応じて時間軸の最小・最大を自動拡張（例: 7:00や21:00）
+        displayList.forEach(item => {
+            if (item.shiftText) {
+                const ranges = parseShiftTimeRanges(item.shiftText);
+                ranges.forEach(r => {
+                    const startH = Math.floor(r.startMin / 60);
+                    const endH = Math.ceil(r.endMin / 60);
+                    if (startH < baseStartHour) baseStartHour = Math.max(6, startH);
+                    if (endH > baseEndHour) baseEndHour = Math.min(23, endH);
+                });
+            }
+            if (item.record && item.record.checkin) {
+                const checkinMin = parseTimeToMinutes(item.record.checkin);
+                if (checkinMin !== null) {
+                    const h = Math.floor(checkinMin / 60);
+                    if (h < baseStartHour) baseStartHour = Math.max(6, h);
+                }
+                if (item.record.checkout) {
+                    const checkoutMin = parseTimeToMinutes(item.record.checkout);
+                    if (checkoutMin !== null) {
+                        const h = Math.ceil(checkoutMin / 60);
+                        if (h > baseEndHour) baseEndHour = Math.min(23, h);
+                    }
+                }
+            }
+        });
+
+        const baseStartMin = baseStartHour * 60;
+        const baseEndMin = baseEndHour * 60;
+        const totalDurationMin = baseEndMin - baseStartMin;
+
+        // HTML生成
+        let html = '';
+
+        // 1. 時間目盛りヘッダー
+        html += '<div class="timeline-scale-row">';
+        html += '<div class="timeline-scale-label-spacer">スタッフ</div>';
+        html += '<div class="timeline-scale-track">';
+        for (let h = baseStartHour; h < baseEndHour; h++) {
+            html += `<div class="timeline-hour-mark">${h}:00</div>`;
+        }
+        html += '</div></div>';
+
+        // 現在時刻ラインの相対位置（%）
+        let nowLineHtml = '';
+        if (nowTotalMin >= baseStartMin && nowTotalMin <= baseEndMin) {
+            const nowPct = ((nowTotalMin - baseStartMin) / totalDurationMin) * 100;
+            const nowTimeStr = `${String(nowHour).padStart(2, '0')}:${String(nowMin).padStart(2, '0')}`;
+            nowLineHtml = `
+                <div class="timeline-now-line" style="left: ${nowPct.toFixed(2)}%;">
+                    <span class="timeline-now-tag">現在 ${nowTimeStr}</span>
+                </div>
+            `;
+        }
+
+        // 2. 各スタッフ行の描画
+        displayList.forEach(item => {
+            const staff = item.staff;
+            const profile = getStaffDisplayProfile(staff);
+            const shiftText = item.shiftText;
+            const record = item.record;
+
+            let barsHtml = '';
+
+            // A. 予定（シフト）バー描画（上段）
+            if (shiftText) {
+                const ranges = parseShiftTimeRanges(shiftText);
+                ranges.forEach(r => {
+                    const barStart = Math.max(baseStartMin, r.startMin);
+                    const barEnd = Math.min(baseEndMin, r.endMin);
+                    if (barEnd > barStart) {
+                        const leftPct = ((barStart - baseStartMin) / totalDurationMin) * 100;
+                        const widthPct = ((barEnd - barStart) / totalDurationMin) * 100;
+                        barsHtml += `
+                            <div class="timeline-bar timeline-bar-shift" style="left: ${leftPct.toFixed(2)}%; width: ${widthPct.toFixed(2)}%;" title="予定シフト: ${r.startStr}〜${r.endStr}">
+                                <span>${r.startStr} - ${r.endStr}</span>
+                            </div>
+                        `;
+                    }
+                });
+            }
+
+            // B. 実績バー描画（下段）
+            if (record && record.checkin) {
+                const checkinMin = parseTimeToMinutes(record.checkin);
+                let checkoutMin = record.checkout ? parseTimeToMinutes(record.checkout) : nowTotalMin;
+                if (checkoutMin === null) checkoutMin = nowTotalMin;
+
+                // 休憩処理
+                const breakStartMin = record.breakStart ? parseTimeToMinutes(record.breakStart) : null;
+                const breakEndMin = record.breakEnd ? parseTimeToMinutes(record.breakEnd) : (staff.status === 'break' ? nowTotalMin : null);
+
+                function addWorkBar(sMin, eMin, sStr, eStr, isLive) {
+                    const startClamped = Math.max(baseStartMin, sMin);
+                    const endClamped = Math.min(baseEndMin, eMin);
+                    if (endClamped > startClamped) {
+                        const leftPct = ((startClamped - baseStartMin) / totalDurationMin) * 100;
+                        const widthPct = ((endClamped - startClamped) / totalDurationMin) * 100;
+                        const label = isLive ? `${sStr}〜勤務中` : `${sStr}〜${eStr}`;
+                        barsHtml += `
+                            <div class="timeline-bar timeline-bar-work" style="left: ${leftPct.toFixed(2)}%; width: ${widthPct.toFixed(2)}%;" title="実績: ${sStr}〜${eStr}">
+                                <span>${label}</span>
+                            </div>
+                        `;
+                    }
+                }
+
+                if (breakStartMin !== null && breakStartMin < checkoutMin) {
+                    // セグメント1: 出勤〜休憩開始（勤務）
+                    addWorkBar(checkinMin, breakStartMin, record.checkin, record.breakStart, false);
+                    
+                    // セグメント2: 休憩中（オレンジ）
+                    const breakEndClamped = breakEndMin !== null ? Math.min(checkoutMin, breakEndMin) : checkoutMin;
+                    if (breakEndClamped > breakStartMin) {
+                        const bStart = Math.max(baseStartMin, breakStartMin);
+                        const bEnd = Math.min(baseEndMin, breakEndClamped);
+                        if (bEnd > bStart) {
+                            const bLeft = ((bStart - baseStartMin) / totalDurationMin) * 100;
+                            const bWidth = ((bEnd - bStart) / totalDurationMin) * 100;
+                            barsHtml += `
+                                <div class="timeline-bar timeline-bar-break" style="left: ${bLeft.toFixed(2)}%; width: ${bWidth.toFixed(2)}%;" title="休憩: ${record.breakStart}〜${record.breakEnd || '現在'}">
+                                    <span>休憩</span>
+                                </div>
+                            `;
+                        }
+                    }
+
+                    // セグメント3: 休憩後〜退勤/現在（勤務）
+                    if (breakEndMin !== null && breakEndMin < checkoutMin) {
+                        addWorkBar(breakEndMin, checkoutMin, record.breakEnd, record.checkout || '勤務中', !record.checkout);
+                    }
+                } else {
+                    // 休憩なし単一セグメント
+                    addWorkBar(checkinMin, checkoutMin, record.checkin, record.checkout || '勤務中', !record.checkout);
+                }
+            } else {
+                // 実績がまだない場合
+                barsHtml += '<div class="timeline-empty-guide"></div>';
+            }
+
+            html += `
+                <div class="timeline-staff-row">
+                    <div class="timeline-staff-info">
+                        <div class="timeline-staff-avatar ${profile.theme}">
+                            <span>${escapeHTML(profile.code)}</span>
+                        </div>
+                        <div class="timeline-staff-text">
+                            <div class="timeline-staff-name">${escapeHTML(staff.name)}</div>
+                            <div class="timeline-staff-sub">${escapeHTML(profile.en)}</div>
+                        </div>
+                    </div>
+                    <div class="timeline-bars-track">
+                        ${barsHtml}
+                    </div>
+                </div>
+            `;
+        });
+
+        elements.timelineContainer.innerHTML = html;
+
+        // 現在時刻線の設置（最初のトラックに挿入して全体をカバー）
+        if (nowLineHtml) {
+            const firstTrack = elements.timelineContainer.querySelector('.timeline-bars-track');
+            if (firstTrack) {
+                const totalRows = displayList.length;
+                const totalHeightPx = totalRows * 48; // 行の高さに連動
+                const wrapper = document.createElement('div');
+                wrapper.innerHTML = nowLineHtml;
+                const nowEl = wrapper.firstElementChild;
+                nowEl.style.height = `${totalHeightPx + 24}px`;
+                firstTrack.appendChild(nowEl);
+            }
+        }
     }
 
     // ==========================================================================

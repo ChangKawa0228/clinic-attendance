@@ -2090,3 +2090,356 @@ body {
     margin: 0;
     font-weight: 500;
 }
+
+/* ==========================================================================
+   Shift Spreadsheet Link Buttons
+   ========================================================================== */
+.btn-shift-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.45rem 0.85rem;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #0284c7;
+    background: #f0f9ff;
+    border: 1px solid #bae6fd;
+    border-radius: 9999px;
+    text-decoration: none;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 3px rgba(2, 132, 199, 0.08);
+}
+
+.btn-shift-link:hover {
+    background: #e0f2fe;
+    border-color: #7dd3fc;
+    color: #0369a1;
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(2, 132, 199, 0.16);
+}
+
+.btn-shift-nav {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.45rem 0.75rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-decoration: none;
+    color: #334155;
+    background: #ffffff;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    transition: all 0.2s ease;
+}
+
+.btn-shift-nav:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+    color: var(--primary);
+}
+
+/* ==========================================================================
+   Timeline / Gantt Chart: Schedule vs Actual (予定 vs 実績 横棒グラフ)
+   ========================================================================== */
+.timeline-section {
+    margin-top: 1.5rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.timeline-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 0.85rem;
+}
+
+.timeline-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.timeline-title-wrap i {
+    width: 1.25rem;
+    height: 1.25rem;
+    color: var(--primary);
+}
+
+.timeline-title-wrap h3 {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 0;
+}
+
+.timeline-legend {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    flex-wrap: wrap;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #64748b;
+}
+
+.legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.legend-color {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    display: inline-block;
+}
+
+.legend-shift .legend-color {
+    background: linear-gradient(90deg, #0284c7, #38bdf8);
+}
+
+.legend-work .legend-color {
+    background: linear-gradient(90deg, #10b981, #34d399);
+}
+
+.legend-break .legend-color {
+    background: linear-gradient(90deg, #f59e0b, #fbbf24);
+}
+
+.legend-now .legend-line {
+    width: 3px;
+    height: 12px;
+    background: #ef4444;
+    border-radius: 2px;
+    display: inline-block;
+}
+
+/* タイムラインコンテナ & 横スクロール */
+.timeline-scroll-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 12px;
+    background: #ffffff;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.timeline-container {
+    min-width: 720px;
+    padding: 0.75rem;
+}
+
+/* 時間目盛りヘッダー */
+.timeline-scale-row {
+    display: flex;
+    align-items: center;
+    border-bottom: 2px solid #e2e8f0;
+    padding-bottom: 0.4rem;
+    margin-bottom: 0.4rem;
+}
+
+.timeline-scale-label-spacer {
+    width: 135px;
+    flex-shrink: 0;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #94a3b8;
+    text-align: left;
+    padding-left: 0.5rem;
+}
+
+.timeline-scale-track {
+    flex-grow: 1;
+    display: flex;
+    position: relative;
+}
+
+.timeline-hour-mark {
+    flex: 1;
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #64748b;
+    text-align: left;
+    border-left: 1px solid #e2e8f0;
+    padding-left: 0.25rem;
+    user-select: none;
+}
+
+.timeline-hour-mark:last-child {
+    border-right: 1px solid #e2e8f0;
+}
+
+/* スタッフ行 */
+.timeline-staff-row {
+    display: flex;
+    align-items: center;
+    padding: 0.35rem 0;
+    border-bottom: 1px solid #f1f5f9;
+    min-height: 48px;
+    transition: background 0.15s ease;
+}
+
+.timeline-staff-row:hover {
+    background: #f8fafc;
+}
+
+.timeline-staff-info {
+    width: 135px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding-left: 0.35rem;
+    overflow: hidden;
+}
+
+.timeline-staff-avatar {
+    width: 1.85rem;
+    height: 1.85rem;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    font-weight: 800;
+    color: #ffffff;
+    flex-shrink: 0;
+}
+
+.timeline-staff-text {
+    overflow: hidden;
+    line-height: 1.2;
+}
+
+.timeline-staff-name {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #0f172a;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.timeline-staff-sub {
+    font-size: 0.65rem;
+    color: #94a3b8;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* バー描画トラック */
+.timeline-bars-track {
+    flex-grow: 1;
+    position: relative;
+    height: 38px;
+    background-image: repeating-linear-gradient(
+        to right,
+        transparent,
+        transparent calc(100% / 12 - 1px),
+        #f1f5f9 calc(100% / 12 - 1px),
+        #f1f5f9 calc(100% / 12)
+    );
+}
+
+/* タイムラインバー共通 */
+.timeline-bar {
+    position: absolute;
+    border-radius: 5px;
+    font-size: 0.62rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    padding: 0 4px;
+    box-sizing: border-box;
+    user-select: none;
+    transition: width 0.3s ease, left 0.3s ease;
+}
+
+/* 上段: 予定バー（ブルー） */
+.timeline-bar-shift {
+    top: 2px;
+    height: 15px;
+    background: linear-gradient(90deg, #0284c7, #38bdf8);
+    color: #ffffff;
+    box-shadow: 0 1px 3px rgba(2, 132, 199, 0.25);
+    z-index: 2;
+}
+
+/* 下段: 実績バー（グリーン） */
+.timeline-bar-work {
+    top: 20px;
+    height: 15px;
+    background: linear-gradient(90deg, #10b981, #34d399);
+    color: #ffffff;
+    box-shadow: 0 1px 3px rgba(16, 185, 129, 0.25);
+    z-index: 2;
+}
+
+/* 実績: 休憩バー（オレンジ） */
+.timeline-bar-break {
+    top: 20px;
+    height: 15px;
+    background: linear-gradient(90deg, #f59e0b, #fbbf24);
+    color: #ffffff;
+    box-shadow: 0 1px 3px rgba(245, 158, 11, 0.25);
+    z-index: 3;
+}
+
+/* 実績なし/予定のみのガイド線 */
+.timeline-empty-guide {
+    position: absolute;
+    top: 26px;
+    left: 0;
+    right: 0;
+    height: 1px;
+    border-top: 1px dashed #e2e8f0;
+    pointer-events: none;
+}
+
+/* 現在時刻ライン（NOW Line） */
+.timeline-now-line {
+    position: absolute;
+    top: -24px;
+    bottom: -8px;
+    width: 2px;
+    background: #ef4444;
+    z-index: 10;
+    pointer-events: none;
+    box-shadow: 0 0 6px rgba(239, 68, 68, 0.5);
+}
+
+.timeline-now-tag {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #ef4444;
+    color: #ffffff;
+    font-size: 0.58rem;
+    font-weight: 800;
+    padding: 1px 4px;
+    border-radius: 3px;
+    white-space: nowrap;
+    letter-spacing: 0.02em;
+}
+
+.timeline-empty-message {
+    text-align: center;
+    padding: 1.5rem 1rem;
+    color: #94a3b8;
+    font-size: 0.85rem;
+    font-weight: 500;
+}

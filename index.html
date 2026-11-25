@@ -10,7 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
-    <link rel="stylesheet" href="style.css?v=20261124_04">
+    <link rel="stylesheet" href="style.css?v=20261125_01">
 </head>
 <body>
     <!-- App Container -->
@@ -36,6 +36,13 @@
                 <i data-lucide="cloud" id="cloud-sync-icon" class="sync-icon"></i>
                 <span id="sync-status-text">未同期</span>
             </div>
+
+            <!-- Shift Spreadsheet Link Button (ヘッダークイックリンク) -->
+            <a href="https://docs.google.com/spreadsheets/d/18FFiUQSJ_JOLpsienHUfN2Ql06pXrNTFAWlvVo_CG5E/edit?usp=sharing" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-shift-nav" title="シフト表スプレッドシートを開く">
+                <i data-lucide="calendar-days"></i>
+                <span>シフト表</span>
+                <i data-lucide="external-link" style="width: 12px; height: 12px; opacity: 0.65;"></i>
+            </a>
 
             <!-- Admin Link Button -->
             <button id="btn-admin-nav" class="btn btn-secondary btn-icon-only" title="管理画面">
@@ -70,11 +77,39 @@
             <!-- Staff List Grid -->
             <section class="staff-section">
                 <div class="section-header">
-                    <h2><i data-lucide="users"></i> スタッフ一覧</h2>
-                    <span class="helper-text">お名前をタップして打刻してください</span>
+                    <div class="section-title-wrap">
+                        <h2><i data-lucide="users"></i> スタッフ一覧</h2>
+                        <span class="helper-text">お名前をタップして打刻してください</span>
+                    </div>
+                    <a href="https://docs.google.com/spreadsheets/d/18FFiUQSJ_JOLpsienHUfN2Ql06pXrNTFAWlvVo_CG5E/edit?usp=sharing" target="_blank" rel="noopener noreferrer" class="btn-shift-link" title="共有シフト表スプレッドシートを開く">
+                        <i data-lucide="calendar-days"></i>
+                        <span>シフト表を開く</span>
+                        <i data-lucide="external-link" style="width: 12px; height: 12px; opacity: 0.7;"></i>
+                    </a>
                 </div>
                 <div id="staff-grid" class="staff-grid">
                     <!-- Dynamic Staff Cards will be injected here -->
+                </div>
+
+                <!-- Timeline: Schedule vs Actual (予定 vs 実績 横棒グラフ) -->
+                <div class="timeline-section" id="timeline-section">
+                    <div class="timeline-header">
+                        <div class="timeline-title-wrap">
+                            <i data-lucide="gantt-chart"></i>
+                            <h3>本日のタイムスケジュール（予定 vs 実績）</h3>
+                        </div>
+                        <div class="timeline-legend">
+                            <span class="legend-item legend-shift"><span class="legend-color"></span>予定（シフト）</span>
+                            <span class="legend-item legend-work"><span class="legend-color"></span>勤務実績</span>
+                            <span class="legend-item legend-break"><span class="legend-color"></span>休憩</span>
+                            <span class="legend-item legend-now"><span class="legend-line"></span>現在時刻</span>
+                        </div>
+                    </div>
+                    <div class="timeline-scroll-wrap">
+                        <div id="timeline-container" class="timeline-container">
+                            <!-- Dynamic Timeline Chart -->
+                        </div>
+                    </div>
                 </div>
             </section>
 
@@ -716,6 +751,6 @@
 
     <script src="exceljs.min.js"></script>
     <script src="excel-template.js"></script>
-    <script src="app.js?v=20261124_04"></script>
+    <script src="app.js?v=20261125_01"></script>
 </body>
 </html>
