@@ -4,13 +4,31 @@ function authorizeCalendar() {
   Logger.log("認証成功！カレンダー名: " + cal.getName());
 }
 
-// シフト表スプレッドシート権限の強制承認＆初期化用関数（初回のみ実行してアクセス許可）
+// シフト表スプレッドシート権限の強制承認＆初期化用関数（当月＋翌月の2ヶ月分を自動生成）
 function authorizeShiftSpreadsheet() {
   var shiftSs = SpreadsheetApp.openById("18FFiUQSJ_JOLpsienHUfN2Ql06pXrNTFAWlvVo_CG5E");
   Logger.log("シフト表スプレッドシート接続成功！ファイル名: " + shiftSs.getName());
   var now = new Date();
-  var sheet = getOrCreateMonthlyShiftSheet(shiftSs, now.getFullYear(), now.getMonth() + 1);
-  Logger.log("今月のシフトシート確認/作成完了: " + sheet.getName());
+  var curYear = now.getFullYear();
+  var curMonth = now.getMonth() + 1;
+  
+  // 今月のシート作成/確認
+  var sheet = getOrCreateMonthlyShiftSheet(shiftSs, curYear, curMonth);
+  Logger.log("今月シフトシート確認/作成完了: " + sheet.getName());
+
+  // 翌月のシート作成/確認
+  var nextDate = new Date(curYear, curMonth, 1);
+  var nextSheet = getOrCreateMonthlyShiftSheet(shiftSs, nextDate.getFullYear(), nextDate.getMonth() + 1);
+  Logger.log("翌月シフトシート確認/作成完了: " + nextSheet.getName());
+}
+
+// 任意の年月のシフトシートを手動作成したい時に呼ぶ関数（例: 来年1月や2月など）
+function createShiftSheetForMonth(year, month) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var targetSs = getShiftSpreadsheet(ss);
+  var s = getOrCreateMonthlyShiftSheet(targetSs, year, month);
+  Logger.log("作成完了: " + s.getName());
+  return s.getName();
 }
 
 function doGet(e) {
@@ -465,6 +483,19 @@ function loadTodayShift(ss) {
   if (!sheet) {
     // なければ今月のシフトシートを自動生成
     sheet = getOrCreateMonthlyShiftSheet(targetSs, year, month);
+  }
+
+  // ★翌月（来月）のシフトシートも事前に自動作成（前もって来月のシフトを入力・作成できるように）
+  try {
+    var nextMonthDate = new Date(year, month, 1);
+    var nextYear = nextMonthDate.getFullYear();
+    var nextMonth = nextMonthDate.getMonth() + 1;
+    var nextSheet = findMonthlyShiftSheet(targetSs, nextYear, nextMonth);
+    if (!nextSheet) {
+      getOrCreateMonthlyShiftSheet(targetSs, nextYear, nextMonth);
+    }
+  } catch (nextErr) {
+    Logger.log("翌月シフトシート作成エラー: " + nextErr.message);
   }
 
   var result = {
