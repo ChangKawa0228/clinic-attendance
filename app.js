@@ -69,7 +69,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     let pointLogs = store.get('point_logs', []);
     let correctionRequests = store.get('correction_requests', []);
-    const CURRENT_OFFICIAL_GAS_URL = 'https://script.google.com/macros/s/AKfycbyfNtM-cdfrouAinYj4DAHRm8xgG6Ms7erztGwF9AHJ4QmCL6ZVNr1tWl83hEihm7gSTw/exec';
+    const CURRENT_OFFICIAL_GAS_URL = 'https://script.google.com/macros/s/AKfycbw-3DuK5blL7OwmIx6pO7_nc1-4_l6-6EysjFhr3-c4cMz6EJzOBAG6DLM3Z8tKWvn4Dw/exec';
     let settings = store.get('settings', {
         pointRate: 10, // points per hour
         adminPassword: 'admin',
@@ -77,7 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // 最新のGAS URLへ更新（古いURLや空文字が残っている場合の自動アップデート）
-    if (!settings.gasUrl || settings.gasUrl.indexOf('AKfycbyfNtM') === -1) {
+    if (!settings.gasUrl || settings.gasUrl.indexOf('AKfycbw-3DuK') === -1) {
         settings.gasUrl = CURRENT_OFFICIAL_GAS_URL;
         store.set('settings', settings);
     }
