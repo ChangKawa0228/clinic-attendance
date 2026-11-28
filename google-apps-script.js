@@ -33,6 +33,21 @@ function doGet(e) {
       .setMimeType(ContentService.MimeType.JSON);
   }
 
+  // 月間全体シフト取得リクエスト（ガントチャート用）
+  if (e && e.parameter && e.parameter.action === 'getMonthFullShift') {
+    var gYear = parseInt(e.parameter.year, 10) || (new Date()).getFullYear();
+    var gMonth = parseInt(e.parameter.month, 10) || ((new Date()).getMonth() + 1);
+    var fullShiftData = loadMonthFullShift(ss, gYear, gMonth);
+    var fullJson = JSON.stringify({ success: true, data: fullShiftData });
+
+    if (callback) {
+      return ContentService.createTextOutput(callback + '(' + fullJson + ');')
+        .setMimeType(ContentService.MimeType.JAVASCRIPT);
+    }
+    return ContentService.createTextOutput(fullJson)
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
   var calendarId = (e && e.parameter && e.parameter.calendarId) ? e.parameter.calendarId : "honmachifc@gmail.com";
   var allData = loadAllData(ss, calendarId);
   var json = JSON.stringify({ success: true, data: allData });
@@ -107,6 +122,8 @@ function parseJson(str) {
 function loadAllData(ss, calendarId) {
   var calData = getTodayCalendarEvents(calendarId);
   var shiftData = loadTodayShift(ss);
+  var now = new Date();
+  var monthFull = loadMonthFullShift(ss, now.getFullYear(), now.getMonth() + 1);
   return {
     records: loadRecords(ss),
     pointLedger: loadPointLedger(ss),
@@ -114,7 +131,8 @@ function loadAllData(ss, calendarId) {
     correctionRequests: loadRequests(ss),
     calendarEvents: calData.events,
     calendarStatus: calData.status,
-    todayShift: shiftData
+    todayShift: shiftData,
+    monthFullShift: monthFull
   };
 }
 
@@ -544,6 +562,63 @@ function loadTodayShift(ss) {
     }
   }
 
+  return result;
+}
+
+/**
+ * 指定年月の月間全体シフトデータを一括取得する（ガントチャート用）
+ */
+function loadMonthFullShift(ss, year, month) {
+  var targetSs = getShiftSpreadsheet(ss);
+  var sheet = findMonthlyShiftSheet(targetSs, year, month);
+  if (!sheet) {
+    sheet = getOrCreateMonthlyShiftSheet(targetSs, year, month);
+  }
+  var result = {
+    year: year,
+    month: month,
+    sheetName: sheet ? sheet.getName() : null,
+    days: {}
+  };
+  if (!sheet) return result;
+
+  var lastRow = sheet.getLastRow();
+  var lastCol = sheet.getLastColumn();
+  if (lastRow < 2 || lastCol < 3) return result;
+
+  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  var staffColMap = [];
+  for (var c = 2; c < headers.length; c++) {
+    var hName = String(headers[c] || '').trim();
+    if (hName) {
+      staffColMap.push({ name: hName, colIdx: c });
+    }
+  }
+
+  var rows = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+  for (var i = 0; i < rows.length; i++) {
+    var cellDate = rows[i][0];
+    var dayNum = null;
+    if (cellDate instanceof Date) {
+      dayNum = cellDate.getDate();
+    } else if (typeof cellDate === 'number') {
+      dayNum = cellDate;
+    } else if (typeof cellDate === 'string') {
+      var m = cellDate.match(/(\d{1,2})$/);
+      if (m) dayNum = parseInt(m[1], 10);
+    }
+    if (dayNum !== null && dayNum >= 1 && dayNum <= 31) {
+      var dayShifts = {};
+      for (var s = 0; s < staffColMap.length; s++) {
+        var sInfo = staffColMap[s];
+        var val = rows[i][sInfo.colIdx];
+        if (val !== undefined && val !== null && String(val).trim() !== "") {
+          dayShifts[sInfo.name] = String(val).trim();
+        }
+      }
+      result.days[String(dayNum)] = dayShifts;
+    }
+  }
   return result;
 }
 

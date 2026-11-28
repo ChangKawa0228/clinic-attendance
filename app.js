@@ -158,7 +158,16 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Staff / Control Panel
         staffGrid: document.getElementById('staff-grid'),
+        timelineSection: document.getElementById('timeline-section'),
         timelineContainer: document.getElementById('timeline-container'),
+        timelineMainTitle: document.getElementById('timeline-main-title'),
+        btnTimelinePrev: document.getElementById('btn-timeline-prev'),
+        btnTimelineNext: document.getElementById('btn-timeline-next'),
+        btnTimelineToday: document.getElementById('btn-timeline-today'),
+        timelineDatePicker: document.getElementById('timeline-date-picker'),
+        timelineDateLabel: document.getElementById('timeline-date-label'),
+        btnJumpTimeline: document.getElementById('btn-jump-timeline'),
+        btnJumpTimeline2: document.getElementById('btn-jump-timeline-2'),
         controlPanel: document.getElementById('control-panel'),
         btnClosePanel: document.getElementById('btn-close-panel'),
         activeStaffAvatar: document.getElementById('active-staff-avatar'),
@@ -660,6 +669,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================================================
     // Realtime Schedule & Actual Timeline (予定 vs 実績 横棒ガントチャート)
     // ==========================================================================
+    let selectedTimelineDate = new Date();
+    let monthFullShiftCache = {};
+    let isFetchingMonthFullShift = false;
+
     function parseTimeToMinutes(timeStr) {
         if (!timeStr || typeof timeStr !== 'string') return null;
         const m = timeStr.match(/(\d{1,2}):(\d{2})/);
@@ -667,7 +680,73 @@ document.addEventListener('DOMContentLoaded', () => {
         return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
     }
 
-    function renderTodayTimeline() {
+    function formatYMD(d) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    }
+
+    function formatJPDate(d) {
+        const y = d.getFullYear();
+        const m = d.getMonth() + 1;
+        const day = d.getDate();
+        const dows = ['日', '月', '火', '水', '木', '金', '土'];
+        return `${y}年${m}月${day}日 (${dows[d.getDay()]})`;
+    }
+
+    // 指定年月の全体シフトデータをGASから非同期取得
+    function fetchMonthFullShift(year, month) {
+        const mKey = `${year}-${String(month).padStart(2, '0')}`;
+        if (monthFullShiftCache[mKey] || isFetchingMonthFullShift || !settings.gasUrl) return;
+        isFetchingMonthFullShift = true;
+
+        const callbackName = 'fullShiftCb_' + Date.now();
+        const scriptEl = document.createElement('script');
+        let resolved = false;
+
+        const cleanup = () => {
+            if (resolved) return;
+            resolved = true;
+            isFetchingMonthFullShift = false;
+            try { delete window[callbackName]; } catch (e) {}
+            try { if (scriptEl && scriptEl.parentNode) scriptEl.parentNode.removeChild(scriptEl); } catch (e) {}
+        };
+
+        const timer = setTimeout(() => {
+            cleanup();
+            const sep = settings.gasUrl.includes('?') ? '&' : '?';
+            fetch(`${settings.gasUrl}${sep}action=getMonthFullShift&year=${year}&month=${month}`)
+                .then(r => r.json())
+                .then(res => {
+                    if (res && res.data && res.data.days) {
+                        monthFullShiftCache[mKey] = res.data.days;
+                        renderScheduleTimeline();
+                    }
+                })
+                .catch(() => {});
+        }, 5000);
+
+        window[callbackName] = function(resp) {
+            clearTimeout(timer);
+            cleanup();
+            if (resp && resp.data && resp.data.days) {
+                monthFullShiftCache[mKey] = resp.data.days;
+                renderScheduleTimeline();
+            }
+        };
+
+        scriptEl.onerror = function() {
+            clearTimeout(timer);
+            cleanup();
+        };
+
+        const sep = settings.gasUrl.includes('?') ? '&' : '?';
+        scriptEl.src = `${settings.gasUrl}${sep}action=getMonthFullShift&year=${year}&month=${month}&callback=${callbackName}&_t=${Date.now()}`;
+        document.body.appendChild(scriptEl);
+    }
+
+    function renderScheduleTimeline() {
         if (!elements.timelineContainer) return;
 
         const now = new Date();
@@ -675,45 +754,87 @@ document.addEventListener('DOMContentLoaded', () => {
         const nowMin = now.getMinutes();
         const nowTotalMin = nowHour * 60 + nowMin;
 
-        // タイムラインの表示時間範囲（デフォルト: 8:00〜20:00 = 480分〜1200分）
+        const targetDate = selectedTimelineDate || now;
+        const targetYMD = formatYMD(targetDate);
+        const todayYMD = formatYMD(now);
+        const isToday = (targetYMD === todayYMD);
+
+        const targetY = targetDate.getFullYear();
+        const targetM = targetDate.getMonth() + 1;
+        const targetD = targetDate.getDate();
+        const mKey = `${targetY}-${String(targetM).padStart(2, '0')}`;
+
+        // 日付ナビゲーション表示更新
+        if (elements.timelineDateLabel) {
+            const jpStr = formatJPDate(targetDate);
+            elements.timelineDateLabel.textContent = isToday ? `${jpStr} [本日]` : jpStr;
+        }
+        if (elements.timelineDatePicker) {
+            elements.timelineDatePicker.value = targetYMD;
+        }
+        if (elements.timelineMainTitle) {
+            elements.timelineMainTitle.textContent = isToday
+                ? '本日のタイムスケジュール（予定 vs 実績）'
+                : `${targetM}月${targetD}日のタイムスケジュール（予定 vs 実績）`;
+        }
+
+        // 月間シフトのキャッシュがなければ取得を試みる
+        if (!monthFullShiftCache[mKey]) {
+            fetchMonthFullShift(targetY, targetM);
+        }
+
+        // 対象日シフトの取得
+        const dayShifts = (monthFullShiftCache[mKey] && monthFullShiftCache[mKey][targetD])
+            ? monthFullShiftCache[mKey][targetD]
+            : (isToday && todayShift && todayShift.shifts ? todayShift.shifts : {});
+
+        // 対象日実績の取得
+        const dayRecords = records.filter(r => normalizeDateStr(r.date) === targetYMD);
+
+        // タイムラインの表示時間範囲（デフォルト: 8:00〜20:00）
         let baseStartHour = 8;
         let baseEndHour = 20;
 
-        // 本日シフトまたは本日実績があるスタッフを抽出
+        // シフト予定または実績があるスタッフを抽出
         const activeStaffList = [];
         staffs.forEach(staff => {
             const cleanName = staff.name ? staff.name.replace(/\s+/g, '') : '';
             let shiftText = null;
-            if (todayShift && todayShift.shifts) {
-                for (const k in todayShift.shifts) {
+            if (dayShifts) {
+                for (const k in dayShifts) {
                     if (k === staff.name || k.replace(/\s+/g, '') === cleanName) {
-                        shiftText = todayShift.shifts[k];
+                        shiftText = dayShifts[k];
                         break;
                     }
                 }
             }
 
-            const todayRec = getTodayRecord(staff.id);
-            const hasShift = !!shiftText;
-            const hasRecord = !!(todayRec && todayRec.checkin);
+            // 実績レコード
+            const rec = dayRecords.find(r => {
+                const rClean = r.staffName ? r.staffName.replace(/\s+/g, '') : '';
+                return (r.staffId === staff.id) || (cleanName && rClean === cleanName);
+            }) || (isToday ? getTodayRecord(staff.id) : null);
+
+            const hasShift = !!shiftText && shiftText !== '休' && shiftText !== '×';
+            const hasRecord = !!(rec && rec.checkin);
 
             if (hasShift || hasRecord) {
                 activeStaffList.push({
                     staff: staff,
-                    shiftText: shiftText,
-                    record: todayRec
+                    shiftText: hasShift ? shiftText : null,
+                    record: rec
                 });
             }
         });
 
-        // 本日対象者が0人の場合は全スタッフを表示
+        // 0人の場合は全スタッフを表示
         const displayList = activeStaffList.length > 0 ? activeStaffList : staffs.map(s => ({
             staff: s,
             shiftText: null,
-            record: getTodayRecord(s.id)
+            record: dayRecords.find(r => r.staffId === s.id) || (isToday ? getTodayRecord(s.id) : null)
         }));
 
-        // 早出・遅出に応じて時間軸の最小・最大を自動拡張（例: 7:00や21:00）
+        // 早出・遅出に応じて時間軸を自動拡張
         displayList.forEach(item => {
             if (item.shiftText) {
                 const ranges = parseShiftTimeRanges(item.shiftText);
@@ -756,9 +877,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         html += '</div></div>';
 
-        // 現在時刻ラインの相対位置（%）
+        // 現在時刻ライン（本日のみ表示）
         let nowLineHtml = '';
-        if (nowTotalMin >= baseStartMin && nowTotalMin <= baseEndMin) {
+        if (isToday && nowTotalMin >= baseStartMin && nowTotalMin <= baseEndMin) {
             const nowPct = ((nowTotalMin - baseStartMin) / totalDurationMin) * 100;
             const nowTimeStr = `${String(nowHour).padStart(2, '0')}:${String(nowMin).padStart(2, '0')}`;
             nowLineHtml = `
@@ -798,58 +919,52 @@ document.addEventListener('DOMContentLoaded', () => {
             // B. 実績バー描画（下段）
             if (record && record.checkin) {
                 const checkinMin = parseTimeToMinutes(record.checkin);
-                let checkoutMin = record.checkout ? parseTimeToMinutes(record.checkout) : nowTotalMin;
-                if (checkoutMin === null) checkoutMin = nowTotalMin;
+                let checkoutMin = record.checkout ? parseTimeToMinutes(record.checkout) : (isToday ? nowTotalMin : null);
+                if (checkoutMin === null && isToday) checkoutMin = nowTotalMin;
 
-                // 休憩処理
-                const breakStartMin = record.breakStart ? parseTimeToMinutes(record.breakStart) : null;
-                const breakEndMin = record.breakEnd ? parseTimeToMinutes(record.breakEnd) : (staff.status === 'break' ? nowTotalMin : null);
+                if (checkinMin !== null && checkoutMin !== null) {
+                    const breakStartMin = record.breakStart ? parseTimeToMinutes(record.breakStart) : null;
+                    const breakEndMin = record.breakEnd ? parseTimeToMinutes(record.breakEnd) : (isToday && staff.status === 'break' ? nowTotalMin : null);
 
-                function addWorkBar(sMin, eMin, sStr, eStr, isLive) {
-                    const startClamped = Math.max(baseStartMin, sMin);
-                    const endClamped = Math.min(baseEndMin, eMin);
-                    if (endClamped > startClamped) {
-                        const leftPct = ((startClamped - baseStartMin) / totalDurationMin) * 100;
-                        const widthPct = ((endClamped - startClamped) / totalDurationMin) * 100;
-                        const label = isLive ? `${sStr}〜勤務中` : `${sStr}〜${eStr}`;
-                        barsHtml += `
-                            <div class="timeline-bar timeline-bar-work" style="left: ${leftPct.toFixed(2)}%; width: ${widthPct.toFixed(2)}%;" title="実績: ${sStr}〜${eStr}">
-                                <span>${label}</span>
-                            </div>
-                        `;
-                    }
-                }
-
-                if (breakStartMin !== null && breakStartMin < checkoutMin) {
-                    // セグメント1: 出勤〜休憩開始（勤務）
-                    addWorkBar(checkinMin, breakStartMin, record.checkin, record.breakStart, false);
-                    
-                    // セグメント2: 休憩中（オレンジ）
-                    const breakEndClamped = breakEndMin !== null ? Math.min(checkoutMin, breakEndMin) : checkoutMin;
-                    if (breakEndClamped > breakStartMin) {
-                        const bStart = Math.max(baseStartMin, breakStartMin);
-                        const bEnd = Math.min(baseEndMin, breakEndClamped);
-                        if (bEnd > bStart) {
-                            const bLeft = ((bStart - baseStartMin) / totalDurationMin) * 100;
-                            const bWidth = ((bEnd - bStart) / totalDurationMin) * 100;
+                    function addWorkBar(sMin, eMin, sStr, eStr, isLive) {
+                        const startClamped = Math.max(baseStartMin, sMin);
+                        const endClamped = Math.min(baseEndMin, eMin);
+                        if (endClamped > startClamped) {
+                            const leftPct = ((startClamped - baseStartMin) / totalDurationMin) * 100;
+                            const widthPct = ((endClamped - startClamped) / totalDurationMin) * 100;
+                            const label = isLive ? `${sStr}〜勤務中` : `${sStr}〜${eStr}`;
                             barsHtml += `
-                                <div class="timeline-bar timeline-bar-break" style="left: ${bLeft.toFixed(2)}%; width: ${bWidth.toFixed(2)}%;" title="休憩: ${record.breakStart}〜${record.breakEnd || '現在'}">
-                                    <span>休憩</span>
+                                <div class="timeline-bar timeline-bar-work" style="left: ${leftPct.toFixed(2)}%; width: ${widthPct.toFixed(2)}%;" title="実績: ${sStr}〜${eStr}">
+                                    <span>${label}</span>
                                 </div>
                             `;
                         }
                     }
 
-                    // セグメント3: 休憩後〜退勤/現在（勤務）
-                    if (breakEndMin !== null && breakEndMin < checkoutMin) {
-                        addWorkBar(breakEndMin, checkoutMin, record.breakEnd, record.checkout || '勤務中', !record.checkout);
+                    if (breakStartMin !== null && breakStartMin < checkoutMin) {
+                        addWorkBar(checkinMin, breakStartMin, record.checkin, record.breakStart, false);
+                        const breakEndClamped = breakEndMin !== null ? Math.min(checkoutMin, breakEndMin) : checkoutMin;
+                        if (breakEndClamped > breakStartMin) {
+                            const bStart = Math.max(baseStartMin, breakStartMin);
+                            const bEnd = Math.min(baseEndMin, breakEndClamped);
+                            if (bEnd > bStart) {
+                                const bLeft = ((bStart - baseStartMin) / totalDurationMin) * 100;
+                                const bWidth = ((bEnd - bStart) / totalDurationMin) * 100;
+                                barsHtml += `
+                                    <div class="timeline-bar timeline-bar-break" style="left: ${bLeft.toFixed(2)}%; width: ${bWidth.toFixed(2)}%;" title="休憩: ${record.breakStart}〜${record.breakEnd || '現在'}">
+                                        <span>休憩</span>
+                                    </div>
+                                `;
+                            }
+                        }
+                        if (breakEndMin !== null && breakEndMin < checkoutMin) {
+                            addWorkBar(breakEndMin, checkoutMin, record.breakEnd, record.checkout || '勤務中', isToday && !record.checkout);
+                        }
+                    } else {
+                        addWorkBar(checkinMin, checkoutMin, record.checkin, record.checkout || '勤務中', isToday && !record.checkout);
                     }
-                } else {
-                    // 休憩なし単一セグメント
-                    addWorkBar(checkinMin, checkoutMin, record.checkin, record.checkout || '勤務中', !record.checkout);
                 }
             } else {
-                // 実績がまだない場合
                 barsHtml += '<div class="timeline-empty-guide"></div>';
             }
 
@@ -873,12 +988,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         elements.timelineContainer.innerHTML = html;
 
-        // 現在時刻線の設置（最初のトラックに挿入して全体をカバー）
+        // 現在時刻線の設置（本日のみ）
         if (nowLineHtml) {
             const firstTrack = elements.timelineContainer.querySelector('.timeline-bars-track');
             if (firstTrack) {
                 const totalRows = displayList.length;
-                const totalHeightPx = totalRows * 48; // 行の高さに連動
+                const totalHeightPx = totalRows * 48;
                 const wrapper = document.createElement('div');
                 wrapper.innerHTML = nowLineHtml;
                 const nowEl = wrapper.firstElementChild;
@@ -886,6 +1001,51 @@ document.addEventListener('DOMContentLoaded', () => {
                 firstTrack.appendChild(nowEl);
             }
         }
+    }
+
+    const renderTodayTimeline = renderScheduleTimeline;
+    const renderTimeline = renderScheduleTimeline;
+
+    // 日付ナビゲーションイベント
+    if (elements.btnTimelinePrev) {
+        elements.btnTimelinePrev.addEventListener('click', () => {
+            selectedTimelineDate.setDate(selectedTimelineDate.getDate() - 1);
+            renderScheduleTimeline();
+        });
+    }
+    if (elements.btnTimelineNext) {
+        elements.btnTimelineNext.addEventListener('click', () => {
+            selectedTimelineDate.setDate(selectedTimelineDate.getDate() + 1);
+            renderScheduleTimeline();
+        });
+    }
+    if (elements.btnTimelineToday) {
+        elements.btnTimelineToday.addEventListener('click', () => {
+            selectedTimelineDate = new Date();
+            renderScheduleTimeline();
+        });
+    }
+    if (elements.timelineDatePicker) {
+        elements.timelineDatePicker.addEventListener('change', (e) => {
+            if (e.target.value) {
+                selectedTimelineDate = new Date(e.target.value + 'T00:00:00');
+                renderScheduleTimeline();
+            }
+        });
+    }
+    if (elements.btnJumpTimeline) {
+        elements.btnJumpTimeline.addEventListener('click', () => {
+            if (elements.timelineSection) {
+                elements.timelineSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        });
+    }
+    if (elements.btnJumpTimeline2) {
+        elements.btnJumpTimeline2.addEventListener('click', () => {
+            if (elements.timelineSection) {
+                elements.timelineSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        });
     }
 
     // ==========================================================================
@@ -2010,15 +2170,24 @@ document.addEventListener('DOMContentLoaded', () => {
             hasChanges = true;
         }
 
+        // 6. Month Full Shift マージ（月間シフト予定データ）
+        if (cloudData.monthFullShift && cloudData.monthFullShift.year && cloudData.monthFullShift.month) {
+            const mKey = `${cloudData.monthFullShift.year}-${String(cloudData.monthFullShift.month).padStart(2, '0')}`;
+            monthFullShiftCache[mKey] = cloudData.monthFullShift.days || {};
+            hasChanges = true;
+        }
+
         if (hasChanges) {
             saveState();
             reconcileStaffStatusFromRecords();
             renderRecordsTable();
             renderRequestsTables();
             updatePendingBadge();
+            renderScheduleTimeline();
         } else {
             // 変更フラグが立たなくてもステータスの整合性を確保
             reconcileStaffStatusFromRecords();
+            renderScheduleTimeline();
         }
     }
 
@@ -3322,15 +3491,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // 今月の本日分が変更された場合、アプリ内でも即時反映
                 const now = new Date();
+                const mKey = `${currentShiftMonth.year}-${String(currentShiftMonth.month).padStart(2, '0')}`;
+                if (!monthFullShiftCache[mKey]) monthFullShiftCache[mKey] = {};
+                for (const d in shiftsObj) {
+                    if (!monthFullShiftCache[mKey][d]) monthFullShiftCache[mKey][d] = {};
+                    monthFullShiftCache[mKey][d][staff.name] = shiftsObj[d];
+                }
+
                 if (currentShiftMonth.year === now.getFullYear() && currentShiftMonth.month === (now.getMonth() + 1)) {
                     const todayNum = now.getDate();
                     if (shiftsObj[todayNum] !== undefined) {
                         if (!todayShift) todayShift = {};
                         todayShift[staff.name] = shiftsObj[todayNum];
                         renderStaffGrid();
-                        renderTimeline();
                     }
                 }
+                renderScheduleTimeline();
 
                 // クラウドから最新データをフェッチして完全同期
                 setTimeout(() => {

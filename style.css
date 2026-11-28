@@ -2445,6 +2445,87 @@ body {
 }
 
 /* ==========================================================================
+   Timeline Date Navigation Styles
+   ========================================================================== */
+.timeline-date-nav {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    background: #f8fafc;
+    padding: 0.35rem 0.6rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid #e2e8f0;
+}
+
+.btn-date-arrow {
+    padding: 0.28rem 0.6rem !important;
+    font-size: 0.78rem !important;
+    font-weight: 600 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 0.25rem !important;
+    border-color: #cbd5e1 !important;
+    background: #ffffff !important;
+}
+
+.btn-date-arrow:hover {
+    background: #f1f5f9 !important;
+    border-color: #94a3b8 !important;
+}
+
+.timeline-date-picker-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.timeline-hidden-date-input {
+    position: absolute;
+    opacity: 0;
+    width: 100%;
+    height: 100%;
+    left: 0;
+    top: 0;
+    cursor: pointer;
+    z-index: 2;
+}
+
+.timeline-date-display-box {
+    padding: 0.3rem 0.75rem;
+    background: #ffffff;
+    border: 1.5px solid #0284c7;
+    border-radius: var(--radius-sm);
+    font-weight: 700;
+    font-size: 0.86rem;
+    color: #0f172a;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    cursor: pointer;
+    user-select: none;
+    box-shadow: 0 1px 3px rgba(2, 132, 199, 0.12);
+    transition: all 0.2s ease;
+}
+
+.timeline-date-display-box:hover {
+    background: #f0f9ff;
+    border-color: #0369a1;
+}
+
+.btn-date-today {
+    padding: 0.28rem 0.65rem !important;
+    font-size: 0.78rem !important;
+    font-weight: 700 !important;
+    background: #0284c7 !important;
+    border-color: #0284c7 !important;
+    border-radius: var(--radius-sm) !important;
+}
+
+.btn-date-today:hover {
+    background: #0369a1 !important;
+}
+
+/* ==========================================================================
    Staff Individual Shift Modal Styles
    ========================================================================== */
 .btn-staff-shift-action:hover {

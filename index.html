@@ -10,7 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
-    <link rel="stylesheet" href="style.css?v=20261128_02">
+    <link rel="stylesheet" href="style.css?v=20261128_03">
 </head>
 <body>
     <!-- App Container -->
@@ -37,12 +37,11 @@
                 <span id="sync-status-text">未同期</span>
             </div>
 
-            <!-- Shift Spreadsheet Link Button (ヘッダークイックリンク) -->
-            <a href="https://docs.google.com/spreadsheets/d/18FFiUQSJ_JOLpsienHUfN2Ql06pXrNTFAWlvVo_CG5E/edit?usp=sharing" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-shift-nav" title="シフト表スプレッドシートを開く">
-                <i data-lucide="calendar-days"></i>
-                <span>シフト表</span>
-                <i data-lucide="external-link" style="width: 12px; height: 12px; opacity: 0.65;"></i>
-            </a>
+            <!-- Shift Timeline Navigation Button (ヘッダークイックリンク) -->
+            <button type="button" id="btn-jump-timeline" class="btn btn-secondary btn-shift-nav" title="タイムスケジュール・シフト予定を表示">
+                <i data-lucide="gantt-chart"></i>
+                <span>シフト予定表</span>
+            </button>
 
             <!-- Admin Link Button -->
             <button id="btn-admin-nav" class="btn btn-secondary btn-icon-only" title="管理画面">
@@ -81,11 +80,10 @@
                         <h2><i data-lucide="users"></i> スタッフ一覧</h2>
                         <span class="helper-text">お名前をタップして打刻してください</span>
                     </div>
-                    <a href="https://docs.google.com/spreadsheets/d/18FFiUQSJ_JOLpsienHUfN2Ql06pXrNTFAWlvVo_CG5E/edit?usp=sharing" target="_blank" rel="noopener noreferrer" class="btn-shift-link" title="共有シフト表スプレッドシートを開く">
-                        <i data-lucide="calendar-days"></i>
-                        <span>シフト表を開く</span>
-                        <i data-lucide="external-link" style="width: 12px; height: 12px; opacity: 0.7;"></i>
-                    </a>
+                    <button type="button" id="btn-jump-timeline-2" class="btn-shift-link" title="タイムスケジュール・シフト予定を表示">
+                        <i data-lucide="gantt-chart"></i>
+                        <span>シフト予定・日程表を見る</span>
+                    </button>
                 </div>
                 <div id="staff-grid" class="staff-grid">
                     <!-- Dynamic Staff Cards will be injected here -->
@@ -93,11 +91,32 @@
 
                 <!-- Timeline: Schedule vs Actual (予定 vs 実績 横棒グラフ) -->
                 <div class="timeline-section" id="timeline-section">
-                    <div class="timeline-header">
+                    <div class="timeline-header" style="flex-wrap: wrap; gap: 0.75rem;">
                         <div class="timeline-title-wrap">
                             <i data-lucide="gantt-chart"></i>
-                            <h3>本日のタイムスケジュール（予定 vs 実績）</h3>
+                            <h3 id="timeline-main-title">タイムスケジュール（予定 vs 実績）</h3>
                         </div>
+
+                        <!-- 日付ナビゲーションセレクター -->
+                        <div class="timeline-date-nav">
+                            <button type="button" id="btn-timeline-prev" class="btn btn-secondary btn-date-arrow" title="前日">
+                                <i data-lucide="chevron-left"></i> 前日
+                            </button>
+                            <div class="timeline-date-picker-wrap">
+                                <input type="date" id="timeline-date-picker" class="timeline-hidden-date-input">
+                                <div id="timeline-date-display" class="timeline-date-display-box" title="クリックしてカレンダーから日付を選択">
+                                    <i data-lucide="calendar" style="width: 14px; height: 14px; color: #0284c7;"></i>
+                                    <span id="timeline-date-label">読み込み中...</span>
+                                </div>
+                            </div>
+                            <button type="button" id="btn-timeline-next" class="btn btn-secondary btn-date-arrow" title="翌日">
+                                翌日 <i data-lucide="chevron-right"></i>
+                            </button>
+                            <button type="button" id="btn-timeline-today" class="btn btn-primary btn-date-today" title="今日の日付に戻る">
+                                今日
+                            </button>
+                        </div>
+
                         <div class="timeline-legend">
                             <span class="legend-item legend-shift"><span class="legend-color"></span>予定（シフト）</span>
                             <span class="legend-item legend-work"><span class="legend-color"></span>勤務実績</span>
@@ -809,6 +828,6 @@
 
     <script src="exceljs.min.js"></script>
     <script src="excel-template.js"></script>
-    <script src="app.js?v=20261128_02"></script>
+    <script src="app.js?v=20261128_03"></script>
 </body>
 </html>
