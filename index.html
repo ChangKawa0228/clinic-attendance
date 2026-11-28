@@ -10,7 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
-    <link rel="stylesheet" href="style.css?v=20261125_01">
+    <link rel="stylesheet" href="style.css?v=20261128_01">
 </head>
 <body>
     <!-- App Container -->
@@ -164,6 +164,11 @@
                     <!-- 打刻修正申請ボタン -->
                     <button id="btn-open-correction-modal" class="btn btn-secondary btn-full" style="margin-top: 0.75rem; font-size: 0.85rem; padding: 0.6rem; display: flex; align-items: center; justify-content: center; gap: 0.4rem; border-color: var(--border-color);">
                         <i data-lucide="edit-3" style="width: 15px; height: 15px;"></i> 打刻修正・ミスの申請
+                    </button>
+
+                    <!-- スタッフ個別シフト入力ボタン -->
+                    <button id="btn-open-staff-shift-modal" class="btn btn-secondary btn-full btn-staff-shift-action" style="margin-top: 0.5rem; font-size: 0.85rem; padding: 0.65rem; display: flex; align-items: center; justify-content: center; gap: 0.45rem; border: 1.5px solid #bae6fd; background: #f0f9ff; color: #0284c7; font-weight: 700; border-radius: var(--radius-sm); transition: all 0.2s ease;">
+                        <i data-lucide="calendar-plus" style="width: 15px; height: 15px;"></i> シフト希望・予定の入力
                     </button>
                 </div>
             </section>
@@ -486,6 +491,59 @@
         </main>
     </div>
 
+    <!-- Staff Individual Shift Input Modal (個別シフト希望入力) -->
+    <div id="modal-staff-shift" class="modal">
+        <div class="modal-content" style="max-width: 620px; max-height: calc(100vh - 2.5rem); overflow-y: auto; position: relative; padding-bottom: 0;">
+            <button type="button" id="btn-close-staff-shift" class="btn-close"><i data-lucide="x"></i></button>
+            <div class="modal-header" style="text-align: left; border-bottom: 1px solid var(--border-color); padding-bottom: 0.85rem; margin-bottom: 1rem;">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <div id="staff-shift-avatar" class="staff-card-avatar" style="width: 2.75rem; height: 2.75rem; font-size: 0.9rem; flex-shrink: 0;">
+                        <span id="staff-shift-code">ST</span>
+                    </div>
+                    <div>
+                        <h3 id="staff-shift-modal-title" style="margin: 0; font-size: 1.15rem; color: #0f172a;">シフト希望・予定入力</h3>
+                        <p style="margin: 2px 0 0 0; font-size: 0.78rem; color: #64748b;">
+                            総合シフト表のあなた専用の列に安全に反映されます（他の人の予定は一切触れません）。
+                        </p>
+                    </div>
+                </div>
+
+                <!-- 対象月の切り替えセレクター -->
+                <div style="display: flex; gap: 0.5rem; margin-top: 1rem; align-items: center;">
+                    <span style="font-size: 0.8rem; font-weight: 700; color: #475569;">対象年月:</span>
+                    <button type="button" id="btn-shift-month-cur" class="btn btn-secondary btn-shift-month active" style="padding: 0.35rem 0.75rem; font-size: 0.82rem; font-weight: 700;">今月</button>
+                    <button type="button" id="btn-shift-month-next" class="btn btn-secondary btn-shift-month" style="padding: 0.35rem 0.75rem; font-size: 0.82rem; font-weight: 700;">来月</button>
+                </div>
+            </div>
+
+            <!-- クイック一括設定バー -->
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: var(--radius-sm); padding: 0.55rem 0.75rem; margin-bottom: 0.75rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
+                <span style="font-size: 0.78rem; font-weight: 700; color: #64748b; display: flex; align-items: center; gap: 0.3rem;">
+                    <i data-lucide="wand-2" style="width: 14px; height: 14px;"></i> 一括入力:
+                </span>
+                <div style="display: flex; gap: 0.35rem; flex-wrap: wrap;">
+                    <button type="button" id="btn-quick-fill-weekday-full" class="btn btn-secondary" style="font-size: 0.75rem; padding: 0.25rem 0.55rem;">平日を10〜19時</button>
+                    <button type="button" id="btn-quick-fill-weekday-am" class="btn btn-secondary" style="font-size: 0.75rem; padding: 0.25rem 0.55rem;">平日を午前のみ</button>
+                    <button type="button" id="btn-quick-fill-sunday-off" class="btn btn-secondary" style="font-size: 0.75rem; padding: 0.25rem 0.55rem;">日祝を休みに</button>
+                    <button type="button" id="btn-quick-fill-clear" class="btn btn-secondary" style="font-size: 0.75rem; padding: 0.25rem 0.55rem; color: #ef4444;">クリア</button>
+                </div>
+            </div>
+
+            <!-- 月間日付テーブル -->
+            <div id="staff-shift-days-container" style="max-height: 380px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: var(--radius-sm); margin-bottom: 1rem;">
+                <!-- JSで動的にカレンダー行が生成されます -->
+            </div>
+
+            <!-- フッター（下部固定ボタン） -->
+            <div style="position: sticky; bottom: 0; background: white; padding: 0.85rem 0; border-top: 1px solid var(--border-color); display: flex; gap: 0.75rem; z-index: 10;">
+                <button type="button" id="btn-cancel-staff-shift" class="btn btn-secondary" style="flex: 1; padding: 0.75rem;">閉じる</button>
+                <button type="button" id="btn-submit-staff-shift" class="btn btn-primary" style="flex: 2; padding: 0.75rem; font-size: 0.95rem; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 0.4rem;">
+                    <i data-lucide="cloud-upload" style="width: 16px; height: 16px;"></i> 総合シフト表へ保存する
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Edit Staff Modal -->
     <div id="modal-edit-staff" class="modal">
         <div class="modal-content" style="max-width: 440px; position: relative;">
@@ -751,6 +809,6 @@
 
     <script src="exceljs.min.js"></script>
     <script src="excel-template.js"></script>
-    <script src="app.js?v=20261125_01"></script>
+    <script src="app.js?v=20261128_01"></script>
 </body>
 </html>

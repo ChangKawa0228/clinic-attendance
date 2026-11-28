@@ -4,38 +4,37 @@ function authorizeCalendar() {
   Logger.log("認証成功！カレンダー名: " + cal.getName());
 }
 
-// シフト表スプレッドシート権限の強制承認＆初期化用関数（当月＋翌月の2ヶ月分を自動生成）
+// シフト表スプレッドシート権限の強制承認＆初期化用関数（初回のみ実行してアクセス許可）
 function authorizeShiftSpreadsheet() {
   var shiftSs = SpreadsheetApp.openById("18FFiUQSJ_JOLpsienHUfN2Ql06pXrNTFAWlvVo_CG5E");
   Logger.log("シフト表スプレッドシート接続成功！ファイル名: " + shiftSs.getName());
   var now = new Date();
-  var curYear = now.getFullYear();
-  var curMonth = now.getMonth() + 1;
-  
-  // 今月のシート作成/確認
-  var sheet = getOrCreateMonthlyShiftSheet(shiftSs, curYear, curMonth);
-  Logger.log("今月シフトシート確認/作成完了: " + sheet.getName());
-
-  // 翌月のシート作成/確認
-  var nextDate = new Date(curYear, curMonth, 1);
-  var nextSheet = getOrCreateMonthlyShiftSheet(shiftSs, nextDate.getFullYear(), nextDate.getMonth() + 1);
-  Logger.log("翌月シフトシート確認/作成完了: " + nextSheet.getName());
-}
-
-// 任意の年月のシフトシートを手動作成したい時に呼ぶ関数（例: 来年1月や2月など）
-function createShiftSheetForMonth(year, month) {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var targetSs = getShiftSpreadsheet(ss);
-  var s = getOrCreateMonthlyShiftSheet(targetSs, year, month);
-  Logger.log("作成完了: " + s.getName());
-  return s.getName();
+  var sheet = getOrCreateMonthlyShiftSheet(shiftSs, now.getFullYear(), now.getMonth() + 1);
+  Logger.log("今月のシフトシート確認/作成完了: " + sheet.getName());
 }
 
 function doGet(e) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var callback = (e && e.parameter && e.parameter.callback) ? e.parameter.callback : null;
+
+  // 個別スタッフの月間シフト取得リクエスト
+  if (e && e.parameter && e.parameter.action === 'getStaffMonthShift') {
+    var staffName = e.parameter.staffName || "";
+    var year = parseInt(e.parameter.year, 10) || (new Date()).getFullYear();
+    var month = parseInt(e.parameter.month, 10) || ((new Date()).getMonth() + 1);
+    var monthShiftData = loadStaffMonthShift(ss, staffName, year, month);
+    var shiftJson = JSON.stringify({ success: true, data: monthShiftData });
+
+    if (callback) {
+      return ContentService.createTextOutput(callback + '(' + shiftJson + ');')
+        .setMimeType(ContentService.MimeType.JAVASCRIPT);
+    }
+    return ContentService.createTextOutput(shiftJson)
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
   var calendarId = (e && e.parameter && e.parameter.calendarId) ? e.parameter.calendarId : "honmachifc@gmail.com";
   var allData = loadAllData(ss, calendarId);
-  var callback = (e && e.parameter && e.parameter.callback) ? e.parameter.callback : null;
   var json = JSON.stringify({ success: true, data: allData });
   
   if (callback) {
@@ -60,6 +59,15 @@ function doPost(e) {
   var postData = parseJson(rawData);
 
   if (postData) {
+    // 個別スタッフの月間シフト保存リクエスト
+    if (postData.action === 'saveStaffShift' || postData.staffShiftData) {
+      var sName = postData.staffName;
+      var sYear = parseInt(postData.year, 10);
+      var sMonth = parseInt(postData.month, 10);
+      var sShifts = postData.shifts || {};
+      saveStaffMonthShift(ss, sName, sYear, sMonth, sShifts);
+    }
+
     if (postData.records && postData.records.length > 0) {
       saveRecords(ss, postData.records);
     }
@@ -75,7 +83,7 @@ function doPost(e) {
 
     var calendarId = postData.calendarId || "honmachifc@gmail.com";
     var currentData = loadAllData(ss, calendarId);
-    return ContentService.createTextOutput(JSON.stringify({ success: true, data: currentData }))
+    return ContentService.createTextOutput(JSON.stringify({ success: true, message: "OK", data: currentData }))
       .setMimeType(ContentService.MimeType.JSON);
   }
 
@@ -485,19 +493,6 @@ function loadTodayShift(ss) {
     sheet = getOrCreateMonthlyShiftSheet(targetSs, year, month);
   }
 
-  // ★翌月（来月）のシフトシートも事前に自動作成（前もって来月のシフトを入力・作成できるように）
-  try {
-    var nextMonthDate = new Date(year, month, 1);
-    var nextYear = nextMonthDate.getFullYear();
-    var nextMonth = nextMonthDate.getMonth() + 1;
-    var nextSheet = findMonthlyShiftSheet(targetSs, nextYear, nextMonth);
-    if (!nextSheet) {
-      getOrCreateMonthlyShiftSheet(targetSs, nextYear, nextMonth);
-    }
-  } catch (nextErr) {
-    Logger.log("翌月シフトシート作成エラー: " + nextErr.message);
-  }
-
   var result = {
     sheetName: sheet ? sheet.getName() : null,
     date: todayStr,
@@ -668,4 +663,124 @@ function createNextMonthShiftSheet() {
   var nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
   var s = getOrCreateMonthlyShiftSheet(targetSs, nextMonthDate.getFullYear(), nextMonthDate.getMonth() + 1);
   Logger.log('作成完了: ' + s.getName());
+}
+
+/**
+ * 特定スタッフの月間シフト（1日〜末日）を取得する
+ */
+function loadStaffMonthShift(ss, staffName, year, month) {
+  var targetSs = getShiftSpreadsheet(ss);
+  var sheet = findMonthlyShiftSheet(targetSs, year, month);
+  if (!sheet) {
+    sheet = getOrCreateMonthlyShiftSheet(targetSs, year, month);
+  }
+  var result = {
+    staffName: staffName,
+    year: year,
+    month: month,
+    sheetName: sheet ? sheet.getName() : null,
+    shifts: {}
+  };
+  if (!sheet || !staffName) return result;
+
+  var lastRow = sheet.getLastRow();
+  var lastCol = sheet.getLastColumn();
+  if (lastRow < 2 || lastCol < 3) return result;
+
+  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  var staffCol = -1;
+  var cleanTarget = String(staffName || '').replace(/\s+/g, '');
+  for (var c = 2; c < headers.length; c++) {
+    var h = String(headers[c] || '').replace(/\s+/g, '');
+    if (h === cleanTarget || h.indexOf(cleanTarget) !== -1 || cleanTarget.indexOf(h) !== -1) {
+      staffCol = c + 1; // 1-based index
+      break;
+    }
+  }
+  if (staffCol === -1) return result;
+
+  var dateAndShiftValues = sheet.getRange(2, 1, lastRow - 1, staffCol).getValues();
+  for (var i = 0; i < dateAndShiftValues.length; i++) {
+    var dayVal = dateAndShiftValues[i][0];
+    var dayNum = null;
+    if (dayVal instanceof Date) dayNum = dayVal.getDate();
+    else if (typeof dayVal === 'number') dayNum = dayVal;
+    else if (typeof dayVal === 'string') {
+      var m = dayVal.match(/(\d{1,2})$/);
+      if (m) dayNum = parseInt(m[1], 10);
+    }
+    if (dayNum !== null) {
+      result.shifts[String(dayNum)] = String(dateAndShiftValues[i][staffCol - 1] || '').trim();
+    }
+  }
+  return result;
+}
+
+/**
+ * 特定スタッフの月間シフトを総合シートの該当列に保存する
+ * （他の人の列には一切触れず、そのスタッフの列だけをピンポイント更新）
+ */
+function saveStaffMonthShift(ss, staffName, year, month, shiftsObj) {
+  var targetSs = getShiftSpreadsheet(ss);
+  var sheet = findMonthlyShiftSheet(targetSs, year, month);
+  if (!sheet) {
+    sheet = getOrCreateMonthlyShiftSheet(targetSs, year, month);
+  }
+  if (!sheet || !staffName || !shiftsObj) return false;
+
+  var lastRow = sheet.getLastRow();
+  var lastCol = sheet.getLastColumn();
+  if (lastRow < 2) return false;
+
+  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  var staffCol = -1;
+  var cleanTarget = String(staffName).replace(/\s+/g, '');
+  for (var c = 2; c < headers.length; c++) {
+    var h = String(headers[c] || '').replace(/\s+/g, '');
+    if (h === cleanTarget || h.indexOf(cleanTarget) !== -1 || cleanTarget.indexOf(h) !== -1) {
+      staffCol = c + 1;
+      break;
+    }
+  }
+
+  // もしそのスタッフの列がまだ無ければ、末尾に新規列を追加！
+  if (staffCol === -1) {
+    staffCol = lastCol + 1;
+    sheet.getRange(1, staffCol)
+      .setValue(staffName)
+      .setFontWeight('bold')
+      .setBackground('#0f172a')
+      .setFontColor('#ffffff')
+      .setHorizontalAlignment('center');
+    sheet.setColumnWidth(staffCol, 160);
+
+    var shiftRange = sheet.getRange(2, staffCol, lastRow - 1, 1);
+    var rule = SpreadsheetApp.newDataValidation()
+      .requireValueInList(DEFAULT_SHIFT_OPTIONS, true)
+      .setAllowInvalid(true)
+      .build();
+    shiftRange.setDataValidation(rule);
+  }
+
+  // 各日付の行を探して、そのスタッフの列のセルに値を反映
+  var dateValues = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+  for (var i = 0; i < dateValues.length; i++) {
+    var dayVal = dateValues[i][0];
+    var dayNum = null;
+    if (dayVal instanceof Date) dayNum = dayVal.getDate();
+    else if (typeof dayVal === 'number') dayNum = dayVal;
+    else if (typeof dayVal === 'string') {
+      var m = dayVal.match(/(\d{1,2})$/);
+      if (m) dayNum = parseInt(m[1], 10);
+    }
+
+    if (dayNum !== null && shiftsObj.hasOwnProperty(String(dayNum))) {
+      var valToSet = shiftsObj[String(dayNum)];
+      var rowIndex = i + 2;
+      sheet.getRange(rowIndex, staffCol).setValue(valToSet || '');
+    }
+  }
+
+  Logger.log(staffName + 'さんのシフトを更新完了 (' + year + '-' + month + ')');
+  return true;
 }

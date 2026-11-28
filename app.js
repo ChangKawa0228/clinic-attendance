@@ -266,6 +266,23 @@ document.addEventListener('DOMContentLoaded', () => {
         correctionReasonSelect: document.getElementById('correction-reason-select'),
         correctionReasonDetail: document.getElementById('correction-reason-detail'),
 
+        // Staff Individual Shift Input Modal
+        btnOpenStaffShiftModal: document.getElementById('btn-open-staff-shift-modal'),
+        modalStaffShift: document.getElementById('modal-staff-shift'),
+        btnCloseStaffShift: document.getElementById('btn-close-staff-shift'),
+        btnCancelStaffShift: document.getElementById('btn-cancel-staff-shift'),
+        btnSubmitStaffShift: document.getElementById('btn-submit-staff-shift'),
+        staffShiftAvatar: document.getElementById('staff-shift-avatar'),
+        staffShiftCode: document.getElementById('staff-shift-code'),
+        staffShiftModalTitle: document.getElementById('staff-shift-modal-title'),
+        btnShiftMonthCur: document.getElementById('btn-shift-month-cur'),
+        btnShiftMonthNext: document.getElementById('btn-shift-month-next'),
+        staffShiftDaysContainer: document.getElementById('staff-shift-days-container'),
+        btnQuickFillWeekdayFull: document.getElementById('btn-quick-fill-weekday-full'),
+        btnQuickFillWeekdayAm: document.getElementById('btn-quick-fill-weekday-am'),
+        btnQuickFillSundayOff: document.getElementById('btn-quick-fill-sunday-off'),
+        btnQuickFillClear: document.getElementById('btn-quick-fill-clear'),
+
         // Admin: Correction Requests Management
         badgePendingRequests: document.getElementById('badge-pending-requests'),
         pendingCountText: document.getElementById('pending-count-text'),
@@ -2915,6 +2932,417 @@ document.addEventListener('DOMContentLoaded', () => {
 
             elements.modalCorrectionRequest.classList.remove('active');
             showToast('管理者に打刻修正申請を送信しました。承認をお待ちください。', 'success');
+        });
+    }
+
+    // ==========================================================================
+    // Staff Individual Shift Modal (個別シフト希望入力 & 総合シフト表へ自動集約)
+    // ==========================================================================
+    let currentShiftMonth = {
+        year: new Date().getFullYear(),
+        month: new Date().getMonth() + 1
+    };
+    let currentStaffShiftsCache = {};
+    let isSavingStaffShift = false;
+
+    // 開くボタン
+    if (elements.btnOpenStaffShiftModal) {
+        elements.btnOpenStaffShiftModal.addEventListener('click', () => {
+            if (!selectedStaffId) {
+                showToast('スタッフを選択してください。', 'warning');
+                return;
+            }
+            const staff = staffs.find(s => s.id === selectedStaffId);
+            if (!staff) return;
+
+            // 初期化：今月に設定
+            const now = new Date();
+            currentShiftMonth = {
+                year: now.getFullYear(),
+                month: now.getMonth() + 1
+            };
+
+            // ヘッダー情報セット
+            if (elements.staffShiftAvatar) {
+                elements.staffShiftAvatar.style.backgroundColor = staff.color || 'var(--primary-color)';
+            }
+            if (elements.staffShiftCode) {
+                elements.staffShiftCode.textContent = staff.code || staff.name.substring(0, 2);
+            }
+            if (elements.staffShiftModalTitle) {
+                elements.staffShiftModalTitle.textContent = `${staff.name} さんのシフト希望入力`;
+            }
+
+            updateMonthSelectorButtons();
+            loadAndRenderStaffShifts(staff);
+
+            elements.modalStaffShift.classList.add('active');
+            if (window.lucide) window.lucide.createIcons();
+        });
+    }
+
+    if (elements.btnCloseStaffShift) {
+        elements.btnCloseStaffShift.addEventListener('click', () => {
+            elements.modalStaffShift.classList.remove('active');
+        });
+    }
+
+    if (elements.btnCancelStaffShift) {
+        elements.btnCancelStaffShift.addEventListener('click', () => {
+            elements.modalStaffShift.classList.remove('active');
+        });
+    }
+
+    function updateMonthSelectorButtons() {
+        const now = new Date();
+        const curY = now.getFullYear();
+        const curM = now.getMonth() + 1;
+        const nextDate = new Date(curY, curM, 1);
+        const nextY = nextDate.getFullYear();
+        const nextM = nextDate.getMonth() + 1;
+
+        if (elements.btnShiftMonthCur) {
+            elements.btnShiftMonthCur.textContent = `${curY}年${curM}月（今月）`;
+            if (currentShiftMonth.year === curY && currentShiftMonth.month === curM) {
+                elements.btnShiftMonthCur.classList.add('active');
+            } else {
+                elements.btnShiftMonthCur.classList.remove('active');
+            }
+        }
+        if (elements.btnShiftMonthNext) {
+            elements.btnShiftMonthNext.textContent = `${nextY}年${nextM}月（来月）`;
+            if (currentShiftMonth.year === nextY && currentShiftMonth.month === nextM) {
+                elements.btnShiftMonthNext.classList.add('active');
+            } else {
+                elements.btnShiftMonthNext.classList.remove('active');
+            }
+        }
+    }
+
+    if (elements.btnShiftMonthCur) {
+        elements.btnShiftMonthCur.addEventListener('click', () => {
+            const now = new Date();
+            currentShiftMonth = { year: now.getFullYear(), month: now.getMonth() + 1 };
+            updateMonthSelectorButtons();
+            const staff = staffs.find(s => s.id === selectedStaffId);
+            if (staff) loadAndRenderStaffShifts(staff);
+        });
+    }
+
+    if (elements.btnShiftMonthNext) {
+        elements.btnShiftMonthNext.addEventListener('click', () => {
+            const now = new Date();
+            const nextDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+            currentShiftMonth = { year: nextDate.getFullYear(), month: nextDate.getMonth() + 1 };
+            updateMonthSelectorButtons();
+            const staff = staffs.find(s => s.id === selectedStaffId);
+            if (staff) loadAndRenderStaffShifts(staff);
+        });
+    }
+
+    // GASから対象スタッフ・年月のシフトを取得
+    function loadAndRenderStaffShifts(staff) {
+        if (!elements.staffShiftDaysContainer) return;
+        elements.staffShiftDaysContainer.innerHTML = `
+            <div style="text-align: center; padding: 2.5rem 1rem; color: #64748b;">
+                <div class="loading-spinner" style="margin: 0 auto 0.75rem auto; width: 26px; height: 26px; border-width: 3px;"></div>
+                <div style="font-size: 0.85rem; font-weight: 600;">総合シフト表から予定データを読み込み中...</div>
+            </div>
+        `;
+
+        if (!settings.gasUrl) {
+            currentStaffShiftsCache = {};
+            renderStaffShiftDaysTable(staff, currentStaffShiftsCache);
+            return;
+        }
+
+        const callbackName = 'shiftCallback_' + Date.now();
+        const scriptEl = document.createElement('script');
+        let resolved = false;
+
+        const cleanup = () => {
+            if (resolved) return;
+            resolved = true;
+            try { delete window[callbackName]; } catch (e) {}
+            try { if (scriptEl && scriptEl.parentNode) scriptEl.parentNode.removeChild(scriptEl); } catch (e) {}
+        };
+
+        const timer = setTimeout(() => {
+            cleanup();
+            // フォールバック: fetch
+            const fetchUrl = `${settings.gasUrl}${settings.gasUrl.includes('?') ? '&' : '?'}action=getStaffMonthShift&staffName=${encodeURIComponent(staff.name)}&year=${currentShiftMonth.year}&month=${currentShiftMonth.month}`;
+            fetch(fetchUrl)
+                .then(r => r.json())
+                .then(res => {
+                    currentStaffShiftsCache = (res && res.data && res.data.shifts) ? res.data.shifts : {};
+                    renderStaffShiftDaysTable(staff, currentStaffShiftsCache);
+                })
+                .catch(() => {
+                    currentStaffShiftsCache = {};
+                    renderStaffShiftDaysTable(staff, currentStaffShiftsCache);
+                });
+        }, 5000);
+
+        window[callbackName] = function(resp) {
+            clearTimeout(timer);
+            cleanup();
+            if (resp && resp.data && resp.data.shifts) {
+                currentStaffShiftsCache = resp.data.shifts;
+            } else {
+                currentStaffShiftsCache = {};
+            }
+            renderStaffShiftDaysTable(staff, currentStaffShiftsCache);
+        };
+
+        scriptEl.onerror = function() {
+            clearTimeout(timer);
+            cleanup();
+            currentStaffShiftsCache = {};
+            renderStaffShiftDaysTable(staff, currentStaffShiftsCache);
+        };
+
+        const sep = settings.gasUrl.includes('?') ? '&' : '?';
+        scriptEl.src = `${settings.gasUrl}${sep}action=getStaffMonthShift&staffName=${encodeURIComponent(staff.name)}&year=${currentShiftMonth.year}&month=${currentShiftMonth.month}&callback=${callbackName}&_t=${Date.now()}`;
+        document.body.appendChild(scriptEl);
+    }
+
+    // テーブル生成
+    const SHIFT_OPTIONS = [
+        { label: '未定 / 空白', value: '' },
+        { label: '10:00〜19:00（フル勤務）', value: '10:00〜19:00' },
+        { label: '10:00〜13:00（午前のみ）', value: '10:00〜13:00' },
+        { label: '17:00〜19:00（午後のみ）', value: '17:00〜19:00' },
+        { label: '10:00〜13:00, 17:00〜19:00（中抜け）', value: '10:00〜13:00, 17:00〜19:00' },
+        { label: '休（公休/希望休）', value: '休' },
+        { label: 'その他（自由入力）', value: '__custom__' }
+    ];
+
+    function renderStaffShiftDaysTable(staff, shiftsObj) {
+        const container = elements.staffShiftDaysContainer;
+        if (!container) return;
+        container.innerHTML = '';
+
+        const y = currentShiftMonth.year;
+        const m = currentShiftMonth.month;
+        const daysInMonth = new Date(y, m, 0).getDate();
+        const dowNames = ['日', '月', '火', '水', '木', '金', '土'];
+        const today = new Date();
+        const isCurrentMonth = (today.getFullYear() === y && (today.getMonth() + 1) === m);
+        const todayDate = today.getDate();
+
+        for (let d = 1; d <= daysInMonth; d++) {
+            const dateObj = new Date(y, m - 1, d);
+            const dow = dateObj.getDay();
+            const isSat = (dow === 6);
+            const isSun = (dow === 0);
+            const isToday = (isCurrentMonth && d === todayDate);
+
+            const row = document.createElement('div');
+            row.className = `staff-shift-day-row ${isSat ? 'is-sat' : ''} ${isSun ? 'is-sun' : ''} ${isToday ? 'is-today' : ''}`;
+            row.dataset.day = d;
+            row.dataset.dow = dow;
+
+            const currentVal = (shiftsObj && shiftsObj[d]) ? String(shiftsObj[d]).trim() : '';
+            const isStandardOpt = SHIFT_OPTIONS.some(opt => opt.value !== '__custom__' && opt.value === currentVal);
+            const isCustom = (!isStandardOpt && currentVal !== '');
+
+            let selectHtml = `<select class="staff-shift-select ${currentVal === '休' ? 'is-off' : (currentVal ? 'is-work' : '')}" data-day="${d}">`;
+            SHIFT_OPTIONS.forEach(opt => {
+                let selected = false;
+                if (opt.value === '__custom__') {
+                    selected = isCustom;
+                } else if (opt.value === currentVal) {
+                    selected = true;
+                }
+                selectHtml += `<option value="${opt.value}" ${selected ? 'selected' : ''}>${opt.label}</option>`;
+            });
+            selectHtml += `</select>`;
+
+            const customInputHtml = `
+                <input type="text" class="staff-shift-custom-input ${isCustom ? '' : 'hidden'}" data-day="${d}" placeholder="自由入力" value="${isCustom ? currentVal : ''}">
+            `;
+
+            row.innerHTML = `
+                <div class="staff-shift-date-badge">
+                    <span>${m}/${d}</span>
+                    <span class="staff-shift-dow">${dowNames[dow]}</span>
+                    ${isToday ? '<span style="font-size:0.68rem; color:#ca8a04; font-weight:800;">本日</span>' : ''}
+                </div>
+                <div class="staff-shift-select-wrapper">
+                    ${selectHtml}
+                    ${customInputHtml}
+                </div>
+            `;
+
+            container.appendChild(row);
+        }
+
+        // イベントバインド: セレクト変更時
+        container.querySelectorAll('.staff-shift-select').forEach(sel => {
+            sel.addEventListener('change', (e) => {
+                const target = e.target;
+                const d = target.dataset.day;
+                const customInput = container.querySelector(`.staff-shift-custom-input[data-day="${d}"]`);
+                if (target.value === '__custom__') {
+                    if (customInput) {
+                        customInput.classList.remove('hidden');
+                        customInput.focus();
+                    }
+                    target.className = 'staff-shift-select';
+                } else {
+                    if (customInput) customInput.classList.add('hidden');
+                    if (target.value === '休') {
+                        target.className = 'staff-shift-select is-off';
+                    } else if (target.value) {
+                        target.className = 'staff-shift-select is-work';
+                    } else {
+                        target.className = 'staff-shift-select';
+                    }
+                }
+            });
+        });
+    }
+
+    // 一括入力ボタン
+    if (elements.btnQuickFillWeekdayFull) {
+        elements.btnQuickFillWeekdayFull.addEventListener('click', () => {
+            quickFillShifts((dow) => (dow >= 1 && dow <= 5), '10:00〜19:00');
+        });
+    }
+    if (elements.btnQuickFillWeekdayAm) {
+        elements.btnQuickFillWeekdayAm.addEventListener('click', () => {
+            quickFillShifts((dow) => (dow >= 1 && dow <= 5), '10:00〜13:00');
+        });
+    }
+    if (elements.btnQuickFillSundayOff) {
+        elements.btnQuickFillSundayOff.addEventListener('click', () => {
+            quickFillShifts((dow) => (dow === 0), '休');
+        });
+    }
+    if (elements.btnQuickFillClear) {
+        elements.btnQuickFillClear.addEventListener('click', () => {
+            if (confirm('入力されたシフトを全てクリア（空白）にしますか？')) {
+                quickFillShifts(() => true, '');
+            }
+        });
+    }
+
+    function quickFillShifts(predicate, targetVal) {
+        const rows = elements.staffShiftDaysContainer.querySelectorAll('.staff-shift-day-row');
+        rows.forEach(r => {
+            const dow = parseInt(r.dataset.dow, 10);
+            if (predicate(dow)) {
+                const sel = r.querySelector('.staff-shift-select');
+                const customInput = r.querySelector('.staff-shift-custom-input');
+                if (sel) {
+                    sel.value = targetVal;
+                    if (targetVal === '休') {
+                        sel.className = 'staff-shift-select is-off';
+                    } else if (targetVal) {
+                        sel.className = 'staff-shift-select is-work';
+                    } else {
+                        sel.className = 'staff-shift-select';
+                    }
+                }
+                if (customInput) {
+                    customInput.classList.add('hidden');
+                    customInput.value = '';
+                }
+            }
+        });
+    }
+
+    // 保存ボタン処理
+    if (elements.btnSubmitStaffShift) {
+        elements.btnSubmitStaffShift.addEventListener('click', () => {
+            if (isSavingStaffShift) return;
+            const staff = staffs.find(s => s.id === selectedStaffId);
+            if (!staff) {
+                showToast('スタッフが選択されていません。', 'error');
+                return;
+            }
+
+            // 日別値の集約
+            const rows = elements.staffShiftDaysContainer.querySelectorAll('.staff-shift-day-row');
+            const shiftsObj = {};
+            rows.forEach(r => {
+                const d = r.dataset.day;
+                const sel = r.querySelector('.staff-shift-select');
+                const customInput = r.querySelector('.staff-shift-custom-input');
+                let val = '';
+                if (sel) {
+                    if (sel.value === '__custom__') {
+                        val = customInput ? customInput.value.trim() : '';
+                    } else {
+                        val = sel.value;
+                    }
+                }
+                shiftsObj[d] = val;
+            });
+
+            isSavingStaffShift = true;
+            const originalBtnHtml = elements.btnSubmitStaffShift.innerHTML;
+            elements.btnSubmitStaffShift.disabled = true;
+            elements.btnSubmitStaffShift.innerHTML = `
+                <div class="loading-spinner" style="width: 16px; height: 16px; border-width: 2px;"></div>
+                総合シフト表へ保存中...
+            `;
+
+            const payload = {
+                action: 'saveStaffShift',
+                staffName: staff.name,
+                year: currentShiftMonth.year,
+                month: currentShiftMonth.month,
+                shifts: shiftsObj
+            };
+
+            // GASへPOST
+            if (!settings.gasUrl) {
+                setTimeout(() => {
+                    isSavingStaffShift = false;
+                    elements.btnSubmitStaffShift.disabled = false;
+                    elements.btnSubmitStaffShift.innerHTML = originalBtnHtml;
+                    elements.modalStaffShift.classList.remove('active');
+                    showToast('シフト希望を保存しました（ローカル）。', 'success');
+                }, 600);
+                return;
+            }
+
+            fetch(settings.gasUrl, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify(payload)
+            }).then(() => {
+                isSavingStaffShift = false;
+                elements.btnSubmitStaffShift.disabled = false;
+                elements.btnSubmitStaffShift.innerHTML = originalBtnHtml;
+                elements.modalStaffShift.classList.remove('active');
+                showToast(`${staff.name} さんのシフトを総合シフト表へ反映しました！`, 'success');
+
+                // 今月の本日分が変更された場合、アプリ内でも即時反映
+                const now = new Date();
+                if (currentShiftMonth.year === now.getFullYear() && currentShiftMonth.month === (now.getMonth() + 1)) {
+                    const todayNum = now.getDate();
+                    if (shiftsObj[todayNum] !== undefined) {
+                        if (!todayShift) todayShift = {};
+                        todayShift[staff.name] = shiftsObj[todayNum];
+                        renderStaffGrid();
+                        renderTimeline();
+                    }
+                }
+
+                // クラウドから最新データをフェッチして完全同期
+                setTimeout(() => {
+                    fetchCloudDataViaJsonp();
+                }, 1000);
+            }).catch(err => {
+                console.error(err);
+                isSavingStaffShift = false;
+                elements.btnSubmitStaffShift.disabled = false;
+                elements.btnSubmitStaffShift.innerHTML = originalBtnHtml;
+                showToast('保存中にエラーが発生しました。通信環境をご確認ください。', 'error');
+            });
         });
     }
 
