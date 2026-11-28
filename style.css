@@ -2664,3 +2664,172 @@ body {
     max-width: 140px;
 }
 
+/* ==========================================================================
+   Clinic Tools Launcher (Google-like App Switcher Hub)
+   ========================================================================== */
+.clinic-launcher-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+.clinic-launcher-dropdown {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: 310px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: var(--radius-md);
+    box-shadow: 0 12px 30px -4px rgba(15, 23, 42, 0.15), 0 4px 6px -2px rgba(15, 23, 42, 0.05);
+    padding: 0.85rem;
+    z-index: 1000;
+    animation: slideDown 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.clinic-launcher-dropdown.hidden {
+    display: none !important;
+}
+
+.launcher-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #f1f5f9;
+    padding-bottom: 0.55rem;
+    margin-bottom: 0.65rem;
+}
+
+.launcher-header h4 {
+    margin: 0;
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: #1e293b;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.launcher-badge {
+    font-size: 0.65rem;
+    font-weight: 800;
+    background: #e0f2fe;
+    color: #0284c7;
+    padding: 2px 6px;
+    border-radius: 4px;
+    letter-spacing: 0.02em;
+}
+
+.launcher-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+
+.launcher-card {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.55rem 0.7rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid #f1f5f9;
+    text-decoration: none;
+    color: inherit;
+    transition: all 0.15s ease;
+    background: #ffffff;
+}
+
+.launcher-card:hover:not(.is-disabled) {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+    transform: translateX(2px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+}
+
+.launcher-card.is-disabled {
+    opacity: 0.55;
+    cursor: default;
+    background: #f8fafc;
+    border-style: dashed;
+}
+
+.launcher-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.launcher-icon i {
+    width: 17px;
+    height: 17px;
+}
+
+.launcher-icon.is-vaccine {
+    background: #eff6ff;
+    color: #2563eb;
+}
+
+.launcher-icon.is-clinic {
+    background: #f0fdf4;
+    color: #16a34a;
+}
+
+.launcher-icon.is-sns {
+    background: #faf5ff;
+    color: #9333ea;
+}
+
+.launcher-icon.is-manual {
+    background: #fefce8;
+    color: #ca8a04;
+}
+
+.launcher-icon.is-sheet {
+    background: #ecfdf5;
+    color: #059669;
+}
+
+.launcher-text {
+    flex: 1;
+    min-width: 0;
+}
+
+.launcher-title {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #0f172a;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+.launcher-ext-icon {
+    width: 11px;
+    height: 11px;
+    opacity: 0.6;
+    margin-left: 1px;
+}
+
+.launcher-desc {
+    font-size: 0.7rem;
+    color: #64748b;
+    margin-top: 1px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.badge-soon {
+    font-size: 0.62rem;
+    font-weight: 700;
+    background: #e2e8f0;
+    color: #475569;
+    padding: 1px 4px;
+    border-radius: 3px;
+    margin-left: 2px;
+}
+

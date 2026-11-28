@@ -10,7 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
-    <link rel="stylesheet" href="style.css?v=20261128_03">
+    <link rel="stylesheet" href="style.css?v=20261128_04">
 </head>
 <body>
     <!-- App Container -->
@@ -42,6 +42,70 @@
                 <i data-lucide="gantt-chart"></i>
                 <span>シフト予定表</span>
             </button>
+
+            <!-- Clinic Tools Launcher Button -->
+            <div class="clinic-launcher-wrap">
+                <button type="button" id="btn-launcher-toggle" class="btn btn-secondary btn-icon-only" title="クリニック業務ツール一覧">
+                    <i data-lucide="layout-grid"></i>
+                </button>
+                <div id="clinic-launcher-dropdown" class="clinic-launcher-dropdown hidden">
+                    <div class="launcher-header">
+                        <h4><i data-lucide="layout-grid" style="width: 15px; height: 15px; color: #0284c7;"></i> クリニック業務ツール</h4>
+                        <span class="launcher-badge">Portal</span>
+                    </div>
+                    <div class="launcher-grid">
+                        <a href="https://fluvaccine.netlify.app/" target="_blank" rel="noopener noreferrer" class="launcher-card">
+                            <div class="launcher-icon is-vaccine">
+                                <i data-lucide="syringe"></i>
+                            </div>
+                            <div class="launcher-text">
+                                <div class="launcher-title">ワクチン問診票 <i data-lucide="external-link" class="launcher-ext-icon"></i></div>
+                                <div class="launcher-desc">患者さま用オンライン問診</div>
+                            </div>
+                        </a>
+
+                        <a href="https://fluvaccine.netlify.app/clinic.html" target="_blank" rel="noopener noreferrer" class="launcher-card">
+                            <div class="launcher-icon is-clinic">
+                                <i data-lucide="clipboard-check"></i>
+                            </div>
+                            <div class="launcher-text">
+                                <div class="launcher-title">問診票 受付管理 <i data-lucide="external-link" class="launcher-ext-icon"></i></div>
+                                <div class="launcher-desc">受付・診察室用回答一覧</div>
+                            </div>
+                        </a>
+
+                        <div class="launcher-card is-disabled" title="準備中">
+                            <div class="launcher-icon is-sns">
+                                <i data-lucide="message-square"></i>
+                            </div>
+                            <div class="launcher-text">
+                                <div class="launcher-title">公式LINE / SNS統合 <span class="badge-soon">準備中</span></div>
+                                <div class="launcher-desc">DM・問い合わせ一括受信</div>
+                            </div>
+                        </div>
+
+                        <div class="launcher-card is-disabled" title="準備中">
+                            <div class="launcher-icon is-manual">
+                                <i data-lucide="book-open"></i>
+                            </div>
+                            <div class="launcher-text">
+                                <div class="launcher-title">院内マニュアル・連絡 <span class="badge-soon">準備中</span></div>
+                                <div class="launcher-desc">業務規定・共有ナレッジ</div>
+                            </div>
+                        </div>
+
+                        <a href="https://docs.google.com/spreadsheets/d/18FFiUQSJ_JOLpsienHUfN2Ql06pXrNTFAWlvVo_CG5E/edit?usp=sharing" target="_blank" rel="noopener noreferrer" class="launcher-card">
+                            <div class="launcher-icon is-sheet">
+                                <i data-lucide="sheet"></i>
+                            </div>
+                            <div class="launcher-text">
+                                <div class="launcher-title">総合シフト表 (原本) <i data-lucide="external-link" class="launcher-ext-icon"></i></div>
+                                <div class="launcher-desc">スプレッドシート直接編集</div>
+                            </div>
+                        </a>
+                    </div>
+                </div>
+            </div>
 
             <!-- Admin Link Button -->
             <button id="btn-admin-nav" class="btn btn-secondary btn-icon-only" title="管理画面">
@@ -828,6 +892,6 @@
 
     <script src="exceljs.min.js"></script>
     <script src="excel-template.js"></script>
-    <script src="app.js?v=20261128_03"></script>
+    <script src="app.js?v=20261128_04"></script>
 </body>
 </html>

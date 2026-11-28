@@ -150,6 +150,8 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Navigation / Main layout
         btnAdminNav: document.getElementById('btn-admin-nav'),
+        btnLauncherToggle: document.getElementById('btn-launcher-toggle'),
+        clinicLauncherDropdown: document.getElementById('clinic-launcher-dropdown'),
         mainAttendance: document.getElementById('main-attendance'),
         mainAdmin: document.getElementById('main-admin'),
         btnBackToAttendance: document.getElementById('btn-back-to-attendance'),
@@ -2316,6 +2318,31 @@ document.addEventListener('DOMContentLoaded', () => {
             const calParam = encodeURIComponent(settings.calendarId || 'honmachifc@gmail.com');
             scriptEl.src = `${settings.gasUrl}${sep}callback=${callbackName}&calendarId=${calParam}&_t=${Date.now()}`;
             document.body.appendChild(scriptEl);
+        });
+    }
+
+    // ==========================================================================
+    // Clinic Tools Launcher
+    // ==========================================================================
+    if (elements.btnLauncherToggle && elements.clinicLauncherDropdown) {
+        elements.btnLauncherToggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            elements.clinicLauncherDropdown.classList.toggle('hidden');
+            if (!elements.clinicLauncherDropdown.classList.contains('hidden')) {
+                if (window.lucide) window.lucide.createIcons();
+            }
+        });
+
+        // ドロップダウン内部のクリックはバブリング停止
+        elements.clinicLauncherDropdown.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+
+        // 画面のどこかをクリックしたら閉じる
+        document.addEventListener('click', () => {
+            if (!elements.clinicLauncherDropdown.classList.contains('hidden')) {
+                elements.clinicLauncherDropdown.classList.add('hidden');
+            }
         });
     }
 
